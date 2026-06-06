@@ -1,0 +1,16 @@
+# Ignore environment variables files
+.env
+*.env
+
+# Ignore Python virtual environment
+venv/
+*/venv/
+
+__pycache__/
+*.pyc
+
+/Backend/venv/
+# Claude Code
+.claude/
+
+/respaldo_stash

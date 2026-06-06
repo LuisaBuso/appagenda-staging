@@ -1,0 +1,587 @@
+// src/api/facturas.ts
+import { API_BASE_URL } from "../../../types/config";
+import {
+  extractPaymentMethodTotalsFromApiSummary,
+  type PaymentMethodTotals,
+} from "../../../lib/payment-methods-summary";
+import { toBackendDate } from "../../../lib/dateFormat";
+
+export interface FacturaAPI {
+  _id: string;
+  identificador: string;
+  fecha_pago: string;
+  local: string;
+  sede_id: string;
+  moneda: string;
+  tipo_comision: string;
+  cliente_id: string;
+  nombre_cliente: string;
+  cedula_cliente: string;
+  email_cliente: string;
+  telefono_cliente: string;
+  items: ItemFactura[];
+  historial_pagos: HistorialPago[];
+  desglose_pagos: DesglosePagos;
+  profesional_id: string;
+  profesional_nombre: string;
+  numero_comprobante: string;
+  facturado_por: string;
+  vendido_por?: string;
+}
+
+export interface ItemFactura {
+  tipo: string;
+  servicio_id?: string;
+  producto_id?: string;
+  nombre: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+  moneda: string;
+  comision: number;
+}
+
+export interface HistorialPago {
+  fecha: string;
+  monto: number;
+  metodo: string;
+  tipo: string;
+  registrado_por: string;
+  saldo_despues: number;
+  notas: string;
+}
+
+export interface DesglosePagos {
+  efectivo: number;
+  total: number;
+  tarjeta?: number;
+  transferencia?: number;
+  tarjeta_credito?: number;
+  tarjeta_debito?: number;
+  addi?: number;
+}
+
+export interface FacturaResponse {
+  success: boolean;
+  total: number;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+    showing: number;
+    from: number;
+    to: number;
+  };
+  filters_applied?: {
+    sede_id: string;
+    fecha_desde: string | null;
+    fecha_hasta: string | null;
+    profesional_id: string | null;
+    search: string | null;
+  };
+  ventas: FacturaAPI[];
+}
+
+export interface FacturaConverted {
+  identificador: string;
+  fecha_pago: string;
+  local: string;
+  sede_id: string;
+  moneda: string;
+  tipo_comision: string;
+  cliente_id: string;
+  nombre_cliente: string;
+  cedula_cliente: string;
+  email_cliente: string;
+  telefono_cliente: string;
+  total: number;
+  comprobante_de_pago: string;
+  numero_comprobante: string;
+  fecha_comprobante: string;
+  monto: number;
+  profesional_id: string;
+  profesional_nombre: string;
+  metodo_pago: string;
+  facturado_por: string;
+  vendido_por?: string;
+  estado: string;
+  items?: ItemFactura[];
+  historial_pagos?: HistorialPago[];
+  desglose_pagos?: DesglosePagos;
+}
+
+export class FacturaService {
+  private static readonly DEFAULT_FULL_FROM = "1900-01-01";
+  private static readonly DEFAULT_FULL_TO = "2999-12-31";
+
+  private getAuthToken(): string | null {
+    return (
+      sessionStorage.getItem("access_token") ||
+      localStorage.getItem("access_token")
+    );
+  }
+
+  private normalizeDateRange(
+    fecha_desde?: string,
+    fecha_hasta?: string
+  ): { fecha_desde: string; fecha_hasta: string } {
+    const desde = toBackendDate(String(fecha_desde || "").trim());
+    const hasta = toBackendDate(String(fecha_hasta || "").trim());
+    const defaultFrom = toBackendDate(FacturaService.DEFAULT_FULL_FROM);
+    const defaultTo = toBackendDate(FacturaService.DEFAULT_FULL_TO);
+
+    if (desde && hasta) {
+      return { fecha_desde: desde, fecha_hasta: hasta };
+    }
+
+    if (desde && !hasta) {
+      return { fecha_desde: desde, fecha_hasta: defaultTo };
+    }
+
+    if (!desde && hasta) {
+      return { fecha_desde: defaultFrom, fecha_hasta: hasta };
+    }
+
+    return {
+      fecha_desde: defaultFrom,
+      fecha_hasta: defaultTo,
+    };
+  }
+
+  private getHeaders() {
+    const token = this.getAuthToken();
+    const headers: HeadersInit = {
+      "accept": "application/json",
+      "Content-Type": "application/json",
+    };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    return headers;
+  }
+
+  // Obtener ventas/facturas de una sede específica
+  async getVentasBySede(
+    sede_id: string, 
+    params?: {
+      page?: number;
+      limit?: number;
+      fecha_desde?: string;
+      fecha_hasta?: string;
+      profesional_id?: string;
+      search?: string;
+    }
+  ): Promise<FacturaConverted[]> {
+    const result = await this.getVentasBySedePaginadas(sede_id, params);
+    return result.facturas;
+  }
+
+  async getVentasBySedePaginadas(
+    sede_id: string,
+    params?: {
+      page?: number;
+      limit?: number;
+      fecha_desde?: string;
+      fecha_hasta?: string;
+      profesional_id?: string;
+      search?: string;
+    }
+  ): Promise<{
+    facturas: FacturaConverted[];
+    pagination?: FacturaResponse["pagination"];
+    filters_applied?: FacturaResponse["filters_applied"];
+    paymentSummary?: PaymentMethodTotals | null;
+  }> {
+    try {
+      const queryParams = new URLSearchParams();
+      const normalizedRange = this.normalizeDateRange(params?.fecha_desde, params?.fecha_hasta);
+      
+      // Agregar parámetros básicos con valores por defecto
+      queryParams.append('page', (params?.page || 1).toString());
+      queryParams.append('limit', (params?.limit || 100).toString());
+      queryParams.append('sort_order', 'desc');
+      
+      // Forzar rango explícito para evitar filtros implícitos del backend.
+      queryParams.append('fecha_desde', normalizedRange.fecha_desde);
+      queryParams.append('fecha_hasta', normalizedRange.fecha_hasta);
+      if (params?.profesional_id) queryParams.append('profesional_id', params.profesional_id);
+      if (params?.search) queryParams.append('search', params.search);
+
+      const url = `${API_BASE_URL}api/billing/sales/${sede_id}?${queryParams.toString()}`;
+      
+      console.log("📤 Solicitando facturas desde:", url);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: this.getHeaders(),
+      });
+
+      if (!response.ok) {
+        // Intentar obtener más detalles del error
+        let errorMessage = `Error ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          console.error("Error detallado del backend:", errorData);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch (e) {
+          // Si no se puede parsear como JSON, usar el texto plano
+          const errorText = await response.text();
+          console.error("Error texto del backend:", errorText);
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data: FacturaResponse = await response.json();
+      const ventas = Array.isArray(data.ventas) ? data.ventas : [];
+      const paymentSummary = extractPaymentMethodTotalsFromApiSummary(data);
+      console.log(`✅ Facturas obtenidas: ${ventas.length} registros`);
+      
+      // Convertir los datos de la API al formato que usa nuestra aplicación
+      return {
+        facturas: ventas.map(factura => this.convertToAppFormat(factura)),
+        pagination: data.pagination,
+        filters_applied: data.filters_applied,
+        paymentSummary,
+      };
+      
+    } catch (error) {
+      console.error("Error obteniendo ventas de la sede:", error);
+      throw error;
+    }
+  }
+
+  async getTodasVentasBySede(
+    sede_id: string,
+    params?: {
+      fecha_desde?: string;
+      fecha_hasta?: string;
+      profesional_id?: string;
+      search?: string;
+      pageSize?: number;
+      maxPages?: number;
+    }
+  ): Promise<FacturaConverted[]> {
+    const pageSize = Math.max(1, params?.pageSize || 200);
+    const maxPages = Math.max(1, params?.maxPages || 500);
+    const allFacturas: FacturaConverted[] = [];
+
+    let page = 1;
+    let hasNext = true;
+    let pagesLoaded = 0;
+
+    while (hasNext && pagesLoaded < maxPages) {
+      const result = await this.getVentasBySedePaginadas(sede_id, {
+        page,
+        limit: pageSize,
+        fecha_desde: params?.fecha_desde,
+        fecha_hasta: params?.fecha_hasta,
+        profesional_id: params?.profesional_id,
+        search: params?.search,
+      });
+
+      allFacturas.push(...result.facturas);
+      pagesLoaded += 1;
+
+      if (!result.pagination) {
+        break;
+      }
+
+      hasNext = Boolean(result.pagination.has_next);
+      page += 1;
+    }
+
+    return allFacturas;
+  }
+
+  // Obtener detalle de una venta específica
+  async getDetalleVenta(sede_id: string, venta_id: string): Promise<FacturaConverted> {
+    try {
+      const url = `${API_BASE_URL}api/billing/sales/${sede_id}/${venta_id}`;
+      console.log("📤 Solicitando detalle de venta:", url);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: this.getHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data: FacturaAPI = await response.json();
+      return this.convertToAppFormat(data);
+      
+    } catch (error) {
+      console.error("Error obteniendo detalle de la venta:", error);
+      throw error;
+    }
+  }
+
+  // Obtener facturas de un cliente específico
+  async getFacturasCliente(cliente_id: string): Promise<FacturaConverted[]> {
+    try {
+      const url = `${API_BASE_URL}api/billing/invoices/${cliente_id}`;
+      console.log("📤 Solicitando facturas del cliente:", url);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: this.getHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data: FacturaResponse = await response.json();
+      const ventas = Array.isArray(data.ventas) ? data.ventas : [];
+      return ventas.map(factura => this.convertToAppFormat(factura));
+      
+    } catch (error) {
+      console.error("Error obteniendo facturas del cliente:", error);
+      throw error;
+    }
+  }
+
+  // Obtener todas las facturas del usuario autenticado
+  async getVentasUsuario(): Promise<FacturaConverted[]> {
+    try {
+      // Obtener el sede_id del usuario desde sessionStorage
+      const sede_id = sessionStorage.getItem("beaux-sede_id");
+      
+      if (!sede_id) {
+        throw new Error("No se encontró sede_id en la sesión");
+      }
+
+      return await this.getVentasBySede(sede_id);
+      
+    } catch (error) {
+      console.error("Error obteniendo ventas del usuario:", error);
+      throw error;
+    }
+  }
+
+  // Convertir datos de API al formato de la aplicación
+  private convertToAppFormat(factura: FacturaAPI): FacturaConverted {
+    const historial = Array.isArray(factura.historial_pagos) ? factura.historial_pagos : [];
+    const items = Array.isArray(factura.items) ? factura.items : [];
+
+    // Determinar el método de pago principal (el que tenga mayor monto)
+    const metodoPago = this.getMetodoPagoPrincipal(historial, factura.desglose_pagos);
+    
+    // Determinar el estado basado en el historial de pagos
+    const estado = this.getEstadoFactura(historial);
+    
+    // Obtener el total del desglose de pagos
+    const total = factura.desglose_pagos?.total || 0;
+    
+    // Obtener fecha comprobante (usar la primera fecha del historial)
+    const fechaComprobante = historial.length > 0 
+      ? historial[0].fecha 
+      : factura.fecha_pago;
+
+    // Obtener el tipo de comprobante basado en el identificador
+    const comprobanteDePago = this.getTipoComprobante(factura.identificador);
+
+    return {
+      identificador: factura.identificador,
+      fecha_pago: factura.fecha_pago,
+      local: factura.local,
+      sede_id: factura.sede_id,
+      moneda: factura.moneda,
+      tipo_comision: factura.tipo_comision,
+      cliente_id: factura.cliente_id,
+      nombre_cliente: (factura.nombre_cliente || "").trim(),
+      cedula_cliente: factura.cedula_cliente,
+      email_cliente: factura.email_cliente,
+      telefono_cliente: factura.telefono_cliente,
+      total: total,
+      comprobante_de_pago: comprobanteDePago,
+      numero_comprobante: factura.numero_comprobante,
+      fecha_comprobante: fechaComprobante,
+      monto: total,
+      profesional_id: factura.profesional_id,
+      profesional_nombre: factura.profesional_nombre,
+      metodo_pago: metodoPago,
+      facturado_por: factura.facturado_por || "Sistema",
+      // Mantener vendido_por fiel al dato real de backend.
+      // No usar fallback a facturado_por: distorsiona reportes de vendedores
+      // porque caja/admin termina apareciendo como si hubiera vendido todo.
+      vendido_por: factura.vendido_por,
+      estado: estado,
+      items: items,
+      historial_pagos: historial,
+      desglose_pagos: factura.desglose_pagos,
+    };
+  }
+
+  private getMetodoPagoPrincipal(historial?: HistorialPago[], desglose?: DesglosePagos): string {
+    const historialSeguro = Array.isArray(historial) ? historial : [];
+    if (historialSeguro.length === 0) {
+      if (!desglose) return "efectivo";
+
+      const metodos = [
+        { metodo: "efectivo", monto: desglose.efectivo || 0 },
+        { metodo: "tarjeta_credito", monto: desglose.tarjeta_credito || 0 },
+        { metodo: "tarjeta_debito", monto: desglose.tarjeta_debito || 0 },
+        { metodo: "addi", monto: desglose.addi || 0 },
+        { metodo: "tarjeta", monto: desglose.tarjeta || 0 },
+        { metodo: "transferencia", monto: desglose.transferencia || 0 },
+      ];
+
+      const metodoPrincipal = metodos.reduce((prev, current) =>
+        prev.monto > current.monto ? prev : current
+      );
+
+      return metodoPrincipal.monto > 0 ? metodoPrincipal.metodo : "efectivo";
+    }
+    
+    // Contar montos totales por método de pago
+    const montosPorMetodo: Record<string, number> = {};
+    historialSeguro.forEach(pago => {
+      montosPorMetodo[pago.metodo] = (montosPorMetodo[pago.metodo] || 0) + pago.monto;
+    });
+    
+    // Devolver el método con mayor monto total
+    return Object.entries(montosPorMetodo)
+      .sort((a, b) => b[1] - a[1])[0][0] || "efectivo";
+  }
+
+  private getEstadoFactura(historial?: HistorialPago[]): string {
+    const historialSeguro = Array.isArray(historial) ? historial : [];
+    if (historialSeguro.length === 0) return "pagado";
+    
+    // Verificar el último pago para determinar el estado
+    const ultimoPago = historialSeguro[historialSeguro.length - 1];
+    return ultimoPago.saldo_despues === 0 ? "pagado" : "pendiente";
+  }
+
+  private getTipoComprobante(identificador: string): string {
+    // Determinar el tipo de comprobante basado en el identificador
+    if (identificador.includes('FAC-')) return "Factura";
+    if (identificador.includes('TIC-')) return "Ticket";
+    if (identificador.includes('REC-')) return "Recibo";
+    return "Comprobante";
+  }
+
+  // Buscar facturas con filtros avanzados
+  async buscarFacturas(filtros: {
+    sede_id?: string;
+    searchTerm?: string;
+    estado?: string;
+    fecha_desde?: string;
+    fecha_hasta?: string;
+    profesional_id?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<FacturaConverted[]> {
+    try {
+      const sede_id = filtros.sede_id || sessionStorage.getItem("beaux-sede_id");
+      
+      if (!sede_id) {
+        throw new Error("No se especificó sede_id para la búsqueda");
+      }
+
+      // Parámetros para la API
+      const params = {
+        page: filtros.page || 1,
+        limit: filtros.limit || 100,
+        fecha_desde: filtros.fecha_desde,
+        fecha_hasta: filtros.fecha_hasta,
+        profesional_id: filtros.profesional_id,
+        search: filtros.searchTerm
+      };
+
+      // Obtener facturas del backend
+      let facturas = await this.getVentasBySede(sede_id, params);
+      
+      // Aplicar filtros adicionales en el frontend si es necesario
+      if (filtros.estado && filtros.estado !== "all") {
+        facturas = facturas.filter(factura => 
+          factura.estado === filtros.estado
+        );
+      }
+      
+      return facturas;
+      
+    } catch (error) {
+      console.error("Error buscando facturas:", error);
+      throw error;
+    }
+  }
+
+  // Exportar facturas a CSV (helper para el frontend)
+  exportarFacturasCSV(facturas: FacturaConverted[], nombreArchivo: string = 'facturas.csv'): void {
+    try {
+      if (facturas.length === 0) {
+        console.warn("No hay facturas para exportar");
+        return;
+      }
+
+      // Crear encabezados
+      const headers = [
+        "Fecha Pago",
+        "Cliente",
+        "Cédula",
+        "Email",
+        "Teléfono",
+        "Local",
+        "Profesional",
+        "N° Comprobante",
+        "Método Pago",
+        "Moneda",
+        "Total",
+        "Estado",
+        "Facturado Por"
+      ];
+
+      // Crear filas
+      const rows = facturas.map(factura => [
+        factura.fecha_pago,
+        factura.nombre_cliente,
+        factura.cedula_cliente || 'N/A',
+        factura.email_cliente || 'N/A',
+        factura.telefono_cliente || 'N/A',
+        factura.local,
+        factura.profesional_nombre,
+        factura.numero_comprobante,
+        factura.metodo_pago,
+        factura.moneda,
+        Math.round(factura.total).toString(),
+        factura.estado,
+        factura.vendido_por || factura.facturado_por
+      ]);
+
+      // Crear contenido CSV
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+      ].join("\n");
+
+      // Crear y descargar archivo
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", nombreArchivo);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log(`✅ Exportadas ${facturas.length} facturas a ${nombreArchivo}`);
+      
+    } catch (error) {
+      console.error("Error exportando facturas a CSV:", error);
+      throw error;
+    }
+  }
+}
+
+// Exportar una instancia única del servicio
+export const facturaService = new FacturaService();

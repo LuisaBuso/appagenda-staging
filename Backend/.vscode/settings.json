@@ -1,0 +1,16 @@
+{
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#603131",
+        "notifications.background": "#603131",
+        "activityBar.inactiveForeground": "#d7d7d7AA",
+        "activityBar.foreground": "#d7d7d7",
+        "notifications.foreground": "#d7d7d7",
+        "quickInput.background": null,
+        "quickInput.foreground": null,
+        "list.hoverBackground": null,
+        "titleBar.activeBackground": null,
+        "titleBar.activeForeground": null,
+        "titleBar.inactiveBackground": null,
+        "titleBar.inactiveForeground": null
+    }
+}

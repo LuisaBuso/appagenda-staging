@@ -1,0 +1,221 @@
+export const APP_ROLES = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  SUPERADMIN: "SUPERADMIN",
+  ADMIN_SEDE: "ADMIN_SEDE",
+  ESTILISTA: "ESTILISTA",
+  CALL_CENTER: "CALL_CENTER",
+  RECEPCIONISTA: "RECEPCIONISTA",
+  UNKNOWN: "UNKNOWN",
+} as const;
+
+export type AppRole = (typeof APP_ROLES)[keyof typeof APP_ROLES];
+
+export const APP_MODULES = {
+  AGENDA_HOME: "AGENDA_HOME",
+  AGENDA_GLOBAL: "AGENDA_GLOBAL",
+  AGENDA_SEDE: "AGENDA_SEDE",
+  AGENDA_STYLIST: "AGENDA_STYLIST",
+
+  SUPER_DASHBOARD: "SUPER_DASHBOARD",
+  SUPER_SALES_INVOICES: "SUPER_SALES_INVOICES",
+  SUPER_PAYMETHODS: "SUPER_PAYMETHODS",
+  SUPER_PERFORMANCE: "SUPER_PERFORMANCE",
+  SUPER_PRODUCTS: "SUPER_PRODUCTS",
+  SUPER_SEDES: "SUPER_SEDES",
+  SUPER_STYLISTS: "SUPER_STYLISTS",
+  SUPER_SERVICES: "SUPER_SERVICES",
+  SUPER_COMMISSIONS: "SUPER_COMMISSIONS",
+  SUPER_CLIENTS: "SUPER_CLIENTS",
+  SUPER_SYSTEM_USERS: "SUPER_SYSTEM_USERS",
+  SUPER_CIERRE_CAJA: "SUPER_CIERRE_CAJA",
+  SUPER_GIFT_CARDS: "SUPER_GIFT_CARDS",
+  SUPER_BILLING: "SUPER_BILLING",
+
+  SEDE_DASHBOARD: "SEDE_DASHBOARD",
+  SEDE_SALES_INVOICED: "SEDE_SALES_INVOICED",
+  SEDE_CIERRE_CAJA: "SEDE_CIERRE_CAJA",
+  SEDE_COMMISSIONS: "SEDE_COMMISSIONS",
+  SEDE_BILLING: "SEDE_BILLING",
+  SEDE_GIFT_CARDS: "SEDE_GIFT_CARDS",
+  SEDE_PERFORMANCE: "SEDE_PERFORMANCE",
+  SEDE_PRODUCTS: "SEDE_PRODUCTS",
+  SEDE_CLIENTS: "SEDE_CLIENTS",
+  SEDE_SERVICES: "SEDE_SERVICES",
+  SEDE_STYLISTS: "SEDE_STYLISTS",
+
+  STYLIST_COMMISSIONS: "STYLIST_COMMISSIONS",
+  STYLIST_REPORTS: "STYLIST_REPORTS",
+} as const;
+
+export type AppModule = (typeof APP_MODULES)[keyof typeof APP_MODULES];
+
+const normalizeRoleToken = (role: string): string =>
+  role.trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+const ROLE_ALIASES: Record<string, AppRole> = {
+  super_admin: APP_ROLES.SUPER_ADMIN,
+  superadmin: APP_ROLES.SUPERADMIN,
+  admin_sede: APP_ROLES.ADMIN_SEDE,
+  estilista: APP_ROLES.ESTILISTA,
+  stylist: APP_ROLES.ESTILISTA,
+  profesional: APP_ROLES.ESTILISTA,
+  call_center: APP_ROLES.CALL_CENTER,
+  callcenter: APP_ROLES.CALL_CENTER,
+  recepcionista: APP_ROLES.RECEPCIONISTA,
+  recepcionoista: APP_ROLES.RECEPCIONISTA,
+};
+
+export const resolveAppRole = (role: string | null | undefined): AppRole => {
+  if (!role) return APP_ROLES.UNKNOWN;
+  return ROLE_ALIASES[normalizeRoleToken(role)] ?? APP_ROLES.UNKNOWN;
+};
+
+const SUPER_ADMIN_MODULES: AppModule[] = [
+  APP_MODULES.AGENDA_HOME,
+  APP_MODULES.AGENDA_GLOBAL,
+  APP_MODULES.SUPER_DASHBOARD,
+  APP_MODULES.SUPER_SALES_INVOICES,
+  APP_MODULES.SUPER_PAYMETHODS,
+  APP_MODULES.SUPER_PERFORMANCE,
+  APP_MODULES.SUPER_PRODUCTS,
+  APP_MODULES.SUPER_SEDES,
+  APP_MODULES.SUPER_STYLISTS,
+  APP_MODULES.SUPER_SERVICES,
+  APP_MODULES.SUPER_COMMISSIONS,
+  APP_MODULES.SUPER_CLIENTS,
+  APP_MODULES.SUPER_SYSTEM_USERS,
+  APP_MODULES.SUPER_CIERRE_CAJA,
+  APP_MODULES.SUPER_GIFT_CARDS,
+  APP_MODULES.SUPER_BILLING,
+];
+
+const SUPERADMIN_MODULES: AppModule[] = [
+  APP_MODULES.SUPER_SYSTEM_USERS,
+  APP_MODULES.SUPER_GIFT_CARDS,
+  APP_MODULES.SUPER_CIERRE_CAJA,
+];
+
+const ADMIN_SEDE_MODULES: AppModule[] = [
+  APP_MODULES.AGENDA_HOME,
+  APP_MODULES.AGENDA_SEDE,
+  APP_MODULES.SEDE_DASHBOARD,
+  APP_MODULES.SEDE_SALES_INVOICED,
+  APP_MODULES.SEDE_CIERRE_CAJA,
+  APP_MODULES.SEDE_COMMISSIONS,
+  APP_MODULES.SEDE_BILLING,
+  APP_MODULES.SEDE_GIFT_CARDS,
+  APP_MODULES.SEDE_PERFORMANCE,
+  APP_MODULES.SEDE_PRODUCTS,
+  APP_MODULES.SEDE_CLIENTS,
+  APP_MODULES.SEDE_SERVICES,
+  APP_MODULES.SEDE_STYLISTS,
+];
+
+const ESTILISTA_MODULES: AppModule[] = [
+  APP_MODULES.AGENDA_HOME,
+  APP_MODULES.AGENDA_STYLIST,
+  APP_MODULES.STYLIST_COMMISSIONS,
+  APP_MODULES.STYLIST_REPORTS,
+];
+
+const CALL_CENTER_MODULES: AppModule[] = [
+  APP_MODULES.AGENDA_HOME,
+  APP_MODULES.AGENDA_GLOBAL,
+  APP_MODULES.SEDE_PRODUCTS,
+  APP_MODULES.SEDE_GIFT_CARDS,
+  APP_MODULES.SUPER_GIFT_CARDS,
+];
+
+const RECEPCIONISTA_MODULES: AppModule[] = [
+  APP_MODULES.AGENDA_HOME,
+  APP_MODULES.AGENDA_SEDE,
+  APP_MODULES.SEDE_BILLING,
+  APP_MODULES.SEDE_CLIENTS,
+  APP_MODULES.SEDE_PRODUCTS,
+];
+
+export const ROLE_PERMISSIONS: Record<AppRole, ReadonlyArray<AppModule>> = {
+  [APP_ROLES.SUPER_ADMIN]: SUPER_ADMIN_MODULES,
+  [APP_ROLES.SUPERADMIN]: SUPERADMIN_MODULES,
+  [APP_ROLES.ADMIN_SEDE]: ADMIN_SEDE_MODULES,
+  [APP_ROLES.ESTILISTA]: ESTILISTA_MODULES,
+  [APP_ROLES.CALL_CENTER]: CALL_CENTER_MODULES,
+  [APP_ROLES.RECEPCIONISTA]: RECEPCIONISTA_MODULES,
+  [APP_ROLES.UNKNOWN]: [],
+};
+
+export const ROUTE_ACCESS_MAP: Record<string, AppModule> = {
+  "/agenda": APP_MODULES.AGENDA_HOME,
+
+  "/superadmin/dashboard": APP_MODULES.SUPER_DASHBOARD,
+  "/superadmin/sales-invoices": APP_MODULES.SUPER_SALES_INVOICES,
+  "/superadmin/paymethods": APP_MODULES.SUPER_PAYMETHODS,
+  "/superadmin/performance": APP_MODULES.SUPER_PERFORMANCE,
+  "/superadmin/appointments": APP_MODULES.AGENDA_GLOBAL,
+  "/superadmin/products": APP_MODULES.SUPER_PRODUCTS,
+  "/superadmin/sedes": APP_MODULES.SUPER_SEDES,
+  "/superadmin/stylists": APP_MODULES.SUPER_STYLISTS,
+  "/superadmin/services": APP_MODULES.SUPER_SERVICES,
+  "/superadmin/commissions": APP_MODULES.SUPER_COMMISSIONS,
+  "/superadmin/clients": APP_MODULES.SUPER_CLIENTS,
+  "/superadmin/system-users": APP_MODULES.SUPER_SYSTEM_USERS,
+  "/superadmin/cierre-caja": APP_MODULES.SUPER_CIERRE_CAJA,
+  "/superadmin/gift-cards": APP_MODULES.SUPER_GIFT_CARDS,
+  "/superadmin/billing": APP_MODULES.SUPER_BILLING,
+
+  "/sede/dashboard": APP_MODULES.SEDE_DASHBOARD,
+  "/sede/sales-invoiced": APP_MODULES.SEDE_SALES_INVOICED,
+  "/sede/cierre-caja": APP_MODULES.SEDE_CIERRE_CAJA,
+  // Módulo de comisiones para admin_sede
+  "/sede/commissions": APP_MODULES.SEDE_COMMISSIONS,
+  "/sede/billing": APP_MODULES.SEDE_BILLING,
+  "/sede/gift-cards": APP_MODULES.SEDE_GIFT_CARDS,
+  "/sede/performance": APP_MODULES.SEDE_PERFORMANCE,
+  "/sede/appointments": APP_MODULES.AGENDA_SEDE,
+  "/sede/products": APP_MODULES.SEDE_PRODUCTS,
+  "/sede/clients": APP_MODULES.SEDE_CLIENTS,
+  "/sede/services": APP_MODULES.SEDE_SERVICES,
+  "/sede/stylists": APP_MODULES.SEDE_STYLISTS,
+
+  "/stylist/appointments": APP_MODULES.AGENDA_STYLIST,
+  "/stylist/commissions": APP_MODULES.STYLIST_COMMISSIONS,
+  "/stylist/reports": APP_MODULES.STYLIST_REPORTS,
+};
+
+const MODULE_SET = new Set<AppModule>(Object.values(APP_MODULES));
+
+const resolveAccessTarget = (target: AppModule | string): AppModule | null => {
+  if (target in ROUTE_ACCESS_MAP) {
+    return ROUTE_ACCESS_MAP[target];
+  }
+
+  if (MODULE_SET.has(target as AppModule)) {
+    return target as AppModule;
+  }
+
+  return null;
+};
+
+export const canAccess = (target: AppModule | string, role: string | null | undefined): boolean => {
+  const module = resolveAccessTarget(target);
+  if (!module) return false;
+
+  const appRole = resolveAppRole(role);
+  return ROLE_PERMISSIONS[appRole].includes(module);
+};
+
+const DEFAULT_ROUTE_BY_ROLE: Record<AppRole, string> = {
+  [APP_ROLES.SUPER_ADMIN]: "/superadmin/dashboard",
+  [APP_ROLES.SUPERADMIN]: "/superadmin/system-users",
+  [APP_ROLES.ADMIN_SEDE]: "/sede/dashboard",
+  [APP_ROLES.ESTILISTA]: "/stylist/appointments",
+  [APP_ROLES.CALL_CENTER]: "/agenda",
+  [APP_ROLES.RECEPCIONISTA]: "/agenda",
+  [APP_ROLES.UNKNOWN]: "/unauthorized",
+};
+
+export const getDefaultRouteForRole = (role: string | null | undefined): string => {
+  return DEFAULT_ROUTE_BY_ROLE[resolveAppRole(role)];
+};
+
+export const AGENDA_PATHS = ["/agenda", "/superadmin/appointments", "/sede/appointments", "/stylist/appointments"] as const;

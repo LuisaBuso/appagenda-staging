@@ -1,0 +1,9 @@
+venv/
+.env
+__pycache__/
+*.pyc
+
+migration/
+
+migration_output/
+output_batch_advanced_v2025/
