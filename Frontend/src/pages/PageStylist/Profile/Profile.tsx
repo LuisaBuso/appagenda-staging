@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, LogOut, Mail, MapPin, Phone, Building2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../components/Auth/AuthContext";
-import { getSedes, type Sede } from "../../../components/Branch/sedesApi";
+import { getSedes } from "../../../components/Branch/sedesApi";
 import { formatSedeNombre } from "../../../lib/sede";
 import StylistBottomNav from "../../../components/Layout/StylistBottomNav";
 

@@ -136,7 +136,7 @@ export default function FinanzasPage() {
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [loadingSedes, setLoadingSedes] = useState(true);
   const [selectedSede, setSelectedSede] = useState<string>("");
-  const [periodoActivo, setPeriodoActivo] = useState<PeriodoId>("mes");
+  const [periodoActivo] = useState<PeriodoId>("mes");
   const [dateRange, setDateRange] = useState<DateRange>({ start_date: "", end_date: "" });
 
   const [reloadNonce, setReloadNonce] = useState(0);

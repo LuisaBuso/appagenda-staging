@@ -12,7 +12,7 @@ import {
   PendientesResumen,
 } from '../../../../types/commissions';
 import { getStoredCurrency, normalizeCurrencyCode } from '../../../../lib/currency';
-import { toBackendDate, toLocalYMD } from '../../../../lib/dateFormat';
+import { toLocalYMD } from '../../../../lib/dateFormat';
 
 export class CommissionsService {
   // Generar un requestKey único basado en filtros

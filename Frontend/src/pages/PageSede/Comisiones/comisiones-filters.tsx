@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { PeriodoSelector, type PeriodoId } from "../../../components/ui/PeriodoSelector";
 import { profesionalesService } from "./Api/profesionalesService";
 import { Professional } from "../../../types/commissions";
-import { formatLocalDate } from "../../../lib/dateFormat";
 
 interface ComisionesFiltersProps {
   onFiltersChange?: (filters: {

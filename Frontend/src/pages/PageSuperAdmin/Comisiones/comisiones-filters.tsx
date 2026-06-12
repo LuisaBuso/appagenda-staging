@@ -17,7 +17,6 @@ import { Professional } from "../../../types/commissions";
 import { sedeService } from "../Sedes/sedeService";
 import type { Sede } from "../../../types/sede";
 import { formatSedeNombre } from "../../../lib/sede";
-import { formatLocalDate } from "../../../lib/dateFormat";
 
 interface ComisionesFiltersProps {
   onFiltersChange?: (filters: {

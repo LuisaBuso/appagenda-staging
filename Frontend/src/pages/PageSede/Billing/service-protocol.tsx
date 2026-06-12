@@ -9,7 +9,7 @@ import { API_BASE_URL } from "../../../types/config";
 import { ProductCatalogModal } from "./ProductCatalogModal";
 import { formatSedeNombre } from "../../../lib/sede";
 import { formatDateDMY } from "../../../lib/dateFormat";
-import { handleFacturarRequest, type FacturarTipo } from "./facturarApi";
+import { handleFacturarRequest } from "./facturarApi";
 import {
   emitElectronicInvoice,
   extractElectronicTargets,
@@ -92,6 +92,7 @@ interface Appointment {
   sede_nombre?: string;
   valor_total?: number;
   estado_pago?: string;
+  estado_factura?: string;
   abono?: number;
   saldo_pendiente?: number;
   historial_pagos?: HistorialPago[];
@@ -168,11 +169,11 @@ export function ServiceProtocol({
 }: ServiceProtocolProps) {
   const { user, activeSedeId } = useAuth();
   const [lastFacturarResult, setLastFacturarResult] = useState<any>(null);
-  const [feStatus, setFeStatus] = useState<"idle" | "loading" | "success" | "error">(
+  const [_feStatus, setFeStatus] = useState<"idle" | "loading" | "success" | "error">(
     "idle",
   );
-  const [feMessage, setFeMessage] = useState<string | null>(null);
-  const reloadTimeoutRef = useRef<number | null>(null);
+  const [_feMessage, setFeMessage] = useState<string | null>(null);
+  const _reloadTimeoutRef = useRef<number | null>(null);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Producto[]>([]);
   const [productsQuantities, setProductsQuantities] = useState<Record<string, number>>({});
@@ -470,7 +471,7 @@ export function ServiceProtocol({
     }
   };
 
-  const handleSendFe = async () => {
+  const _handleSendFe = async () => {
     if (!allegraEnabled || !hasFeTarget) return;
 
     const token = user?.access_token;

@@ -23,7 +23,7 @@ import { facturaService } from "./facturas"
 import { sedeService } from "../Sedes/sedeService"
 import type { Sede } from "../../../types/sede"
 import { formatSedeNombre } from "../../../lib/sede"
-import { formatDateDMY, formatLocalDate } from "../../../lib/dateFormat"
+import { formatDateDMY } from "../../../lib/dateFormat"
 import { PaymentMethodsSummary } from "../../../components/SalesInvoiced/payment-methods-summary"
 import {
   calculatePaymentMethodTotals,

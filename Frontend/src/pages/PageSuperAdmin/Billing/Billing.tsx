@@ -141,7 +141,6 @@ const fmtCOP = (n: number | undefined): string =>
   `$${Math.round(n ?? 0).toLocaleString("es-CO")}`
 
 export default function SuperAdminBilling() {
-  const { user, isAuthenticated } = useAuth()
 
   const [sedes, setSedes] = useState<Sede[]>([])
   const [sedeIdMap, setSedeIdMap] = useState<Record<string, string>>({})
@@ -163,7 +162,7 @@ export default function SuperAdminBilling() {
     sin_pago: 0, otros: 0, addi: 0, giftcard: 0, link_de_pago: 0, descuento_nomina: 0, abono_transferencia: 0,
   })
   const [loadingMetrics, setLoadingMetrics] = useState(true)
-  const [currency, setCurrency] = useState(getStoredCurrency("USD"))
+  const [currency] = useState(getStoredCurrency("USD"))
 
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("pendientes")
   const [searchQuery, setSearchQuery] = useState("")

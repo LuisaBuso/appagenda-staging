@@ -449,7 +449,7 @@ const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
     if (!horaFinManual) setHoraFinValue(horaFin);
   }, [horaFin, horaFinManual]);
 
-  const lastServiceName = useMemo(() => {
+  const _lastServiceName = useMemo(() => {
     if (!clientHistorial.length) return null;
     const last = clientHistorial[0];
     return last?.servicio || last?.servicio_nombre || last?.servicios?.[0]?.nombre || null;

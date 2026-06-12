@@ -16,7 +16,6 @@ import { Sidebar } from "../../components/Layout/Sidebar";
 import { confirmAction } from '../../components/ui/confirm-dialog';
 import { PageHeader } from "../../components/Layout/PageHeader";
 import { Button } from "../../components/ui/button";
-import { Avatar, AvatarFallback } from "../../components/ui/avatar";
 import { PeriodoSelector, type PeriodoId } from "../../components/ui/PeriodoSelector";
 import { useAuth } from "../../components/Auth/AuthContext";
 import { facturaService, type FacturaConverted } from "../../pages/PageSuperAdmin/Sales-invoiced/facturas";

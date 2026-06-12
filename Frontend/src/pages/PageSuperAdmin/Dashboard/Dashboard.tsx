@@ -176,7 +176,7 @@ export default function DashboardPage() {
               <SedeDropdown
                 value={selectedSede}
                 onChange={handleSedeChange}
-                options={sedes.map((s) => ({ value: s.sede_id, label: formatSedeNombre(s.nombre, s.sede_id) }))}
+                options={sedes.map((s) => ({ sede_id: s.sede_id, nombre: formatSedeNombre(s.nombre, s.sede_id) }))}
                 showAll
                 allValue="global"
                 allLabel="Todas las sedes"

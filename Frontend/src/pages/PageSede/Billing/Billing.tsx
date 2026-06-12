@@ -167,7 +167,7 @@ const fmtCOP = (n: number | undefined): string =>
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Billing() {
-  const { user, isAuthenticated, activeSedeId } = useAuth()
+  const { user, activeSedeId } = useAuth()
   const isRecepcionista =
     String(user?.role ?? "")
       .trim()
@@ -219,7 +219,7 @@ export default function Billing() {
     abono_transferencia: 0,
   })
   const [loadingMetrics, setLoadingMetrics] = useState(true)
-  const [currency, setCurrency] = useState(getStoredCurrency("USD"))
+  const [currency] = useState(getStoredCurrency("USD"))
   const [metricsRefreshKey, setMetricsRefreshKey] = useState(0)
 
   // ── UI ────────────────────────────────────────────────────────────────────
