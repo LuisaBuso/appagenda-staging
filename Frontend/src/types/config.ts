@@ -1,2 +1,2 @@
 // src/config.ts
-export const API_BASE_URL = 'http://127.0.0.1:8000/';
+export const API_BASE_URL = 'https://appagenda-production-7c8f.up.railway.app/';

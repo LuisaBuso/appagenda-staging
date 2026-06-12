@@ -3,9 +3,10 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Edit3,
   Loader2,
   Plus,
-  Save,
+  Search,
   Settings2,
   Trash2,
   Users,
@@ -16,8 +17,6 @@ import { confirmAction } from '../../components/ui/confirm-dialog';
 import { PageHeader } from "../../components/Layout/PageHeader";
 import { Button } from "../../components/ui/button";
 import { Avatar, AvatarFallback } from "../../components/ui/avatar";
-import { Badge } from "../../components/ui/badge";
-import { Input } from "../../components/ui/input";
 import { PeriodoSelector, type PeriodoId } from "../../components/ui/PeriodoSelector";
 import { useAuth } from "../../components/Auth/AuthContext";
 import { facturaService, type FacturaConverted } from "../../pages/PageSuperAdmin/Sales-invoiced/facturas";
@@ -27,7 +26,7 @@ import type { Estilista, CreateEstilistaData } from "../../types/estilista";
 import type { SystemUser } from "../../types/system-user";
 import { formatSedeNombre } from "../../lib/sede";
 import { formatCurrencyNoDecimals, getStoredCurrency } from "../../lib/currency";
-import { formatDateDMY, formatLocalDate } from "../../lib/dateFormat";
+import { formatDateDMY } from "../../lib/dateFormat";
 import {
   buildCategoryCommissionPayload,
   resolveCategoryCommissionEntries,
@@ -41,11 +40,6 @@ import {
   type PerformancePeriod,
   type PerformanceProfessional,
 } from "./performanceApi";
-import {
-  getTransacciones,
-  type TransaccionItem,
-  type TransaccionesResponse,
-} from "./transaccionesApi";
 import {
   buildStylistDashboardRows,
   buildVendorRows,
@@ -246,16 +240,10 @@ const TABLE_ROW_CLASS = "border-t border-gray-200 hover:bg-gray-50";
 const TABLE_CELL_CLASS = "px-4 py-3 text-sm text-gray-700";
 const TABLE_CELL_MEDIUM_CLASS = "px-4 py-3 text-sm font-medium text-gray-900";
 const TABLE_CELL_STRONG_CLASS = "px-4 py-3 text-sm font-semibold text-gray-900";
-const FIELD_LABEL_CLASS = "mb-2 block text-sm font-medium text-gray-700";
-const INPUT_CLASS =
-  "h-10 rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus-visible:border-gray-500 focus-visible:ring-1 focus-visible:ring-gray-500";
-const SELECT_CLASS =
-  "h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-500/20";
 const OUTLINE_BUTTON_CLASS = "border-gray-300 bg-white text-gray-800 hover:bg-gray-100 hover:text-gray-900";
 const PRIMARY_BUTTON_CLASS = "bg-black text-white hover:bg-gray-800";
 const STATUS_PILL_CLASS =
   "inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600";
-const BADGE_BASE_CLASS = "rounded-full border px-2 py-1 text-xs font-medium shadow-none";
 const ERROR_ALERT_CLASS = "mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700";
 const WARNING_ALERT_CLASS =
   "mt-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800";
@@ -923,20 +911,19 @@ export function StylistsTeamWorkspace({
   const [periodoActivo, setPeriodoActivo] = useState<PeriodoId>("30dias");
   const [rangoAplicado, setRangoAplicado] = useState<{ from: Date; to: Date } | undefined>(undefined);
   const [panelEstilistaId, setPanelEstilistaId] = useState<string | null>(null);
+  const [settingsTab, setSettingsTab] = useState<"datos" | "sedes" | "servicios" | "productos">("datos");
+  const [settingsSearch, setSettingsSearch] = useState("");
+  const [settingsFilter, setSettingsFilter] = useState<"todos" | "activos" | "inactivos">("todos");
+  const [settingsOpenCategories, setSettingsOpenCategories] = useState<Set<string>>(new Set());
+  const [settingsPanelClosed, setSettingsPanelClosed] = useState(false);
   const [invoices, setInvoices] = useState<FacturaConverted[]>([]);
   const [appointments, setAppointments] = useState<TeamAppointmentRecord[]>([]);
   const [schedulesByStylist, setSchedulesByStylist] = useState<Record<string, TeamScheduleRecord[]>>({});
   const [performanceRows, setPerformanceRows] = useState<PerformanceProfessional[]>([]);
   const [performanceError, setPerformanceError] = useState<string | null>(null);
   const [performancePeriod, setPerformancePeriod] = useState<PerformancePeriod | null>(null);
-  const commissionsSectionRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Transacciones ──────────────────────────────────────────────────────────
-  const [transacciones, setTransacciones] = useState<TransaccionesResponse | null>(null);
-  const [transaccionesLoading, setTransaccionesLoading] = useState(false);
-  const [, setTransaccionesPage] = useState(1);
-  const [transaccionesTipoItem, setTransaccionesTipoItem] = useState("todos");
-  const [transaccionesProfesional, setTransaccionesProfesional] = useState("");
+
 
   const invoicesCacheRef = useRef<Map<string, FacturaConverted[]>>(new Map());
   const appointmentsCacheRef = useRef<Map<string, TeamAppointmentRecord[]>>(new Map());
@@ -1034,6 +1021,19 @@ export function StylistsTeamWorkspace({
       .filter((stylist) => selectedIds.has(String(stylist.sede_id ?? "").trim()))
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [selectedSedeIds, stylists]);
+
+  const filteredSettingsStylists = useMemo(() => {
+    let list = filteredStylists;
+    if (settingsFilter === "activos") list = list.filter((s) => s.activo);
+    else if (settingsFilter === "inactivos") list = list.filter((s) => !s.activo);
+    if (settingsSearch.trim()) {
+      const q = normalizeText(settingsSearch);
+      list = list.filter(
+        (s) => normalizeText(s.nombre).includes(q) || normalizeText(s.email).includes(q),
+      );
+    }
+    return list;
+  }, [filteredStylists, settingsFilter, settingsSearch]);
 
   const selectedStylist = useMemo(
     () => filteredStylists.find((stylist) => stylist.profesional_id === selectedStylistId) ?? null,
@@ -1545,6 +1545,7 @@ export function StylistsTeamWorkspace({
   }, [activeSedeId, selectedSedeId, setActiveSedeId]);
 
   useEffect(() => {
+    if (settingsPanelClosed) return;
     if (filteredStylists.length === 0) {
       setSelectedStylistId("");
       initializeEditorState(null, "create");
@@ -1556,16 +1557,17 @@ export function StylistsTeamWorkspace({
     }
 
     setSelectedStylistId(filteredStylists[0].profesional_id);
-  }, [filteredStylists, initializeEditorState, selectedStylistId]);
+  }, [filteredStylists, initializeEditorState, selectedStylistId, settingsPanelClosed]);
 
   useEffect(() => {
+    if (settingsPanelClosed) return;
     if (!selectedStylist) {
       initializeEditorState(null, "create");
       return;
     }
 
     initializeEditorState(selectedStylist, "edit");
-  }, [initializeEditorState, selectedStylist]);
+  }, [initializeEditorState, selectedStylist, settingsPanelClosed]);
 
   useEffect(() => {
     void loadPerformance();
@@ -1746,42 +1748,6 @@ export function StylistsTeamWorkspace({
     );
   };
 
-  const updateServiceSelection = (currentServiceId: string, nextServiceId: string) => {
-    setEditorState((current) => {
-      if (!current) return current;
-
-      const nextIds = current.serviceIds.map((serviceId) =>
-        serviceId === currentServiceId ? nextServiceId : serviceId,
-      );
-      const dedupedIds = Array.from(new Set(nextIds.filter(Boolean)));
-      const draftEntries = current.serviceCommissions.map((entry) =>
-        entry.servicio_id === currentServiceId ? { ...entry, servicio_id: nextServiceId } : entry,
-      );
-      const nextEntries = dedupedIds.map((serviceId) => {
-        const existingEntry = draftEntries.find((entry) => entry.servicio_id === serviceId);
-        if (existingEntry) {
-          return { ...existingEntry, tipo: "%" as const };
-        }
-
-        const category = getNormalizedCategoryForService(serviceId);
-        const categoryMatch = draftEntries.find(
-          (entry) => getNormalizedCategoryForService(entry.servicio_id) === category,
-        );
-
-        return {
-          servicio_id: serviceId,
-          valor: categoryMatch?.valor ?? 0,
-          tipo: "%" as const,
-        } satisfies ServiceCommissionEntry;
-      });
-
-      return {
-        ...current,
-        serviceIds: dedupedIds,
-        serviceCommissions: nextEntries,
-      };
-    });
-  };
 
   const removeServiceSelection = (serviceId: string) => {
     setEditorState((current) =>
@@ -2090,31 +2056,42 @@ export function StylistsTeamWorkspace({
     void loadPerformance();
   }, [loadPerformance, performanceCacheKey]);
 
-  const loadTransacciones = useCallback(async (page = 1) => {
-    if (!token || !primarySelectedSedeId) return;
-    setTransaccionesLoading(true);
-    try {
-      const data = await getTransacciones(token, {
-        sede_id: primarySelectedSedeId,
-        fecha_desde: dateRange.start,
-        fecha_hasta: dateRange.end,
-        tipo_item: transaccionesTipoItem !== "todos" ? transaccionesTipoItem : undefined,
-        profesional: transaccionesProfesional || undefined,
-        page,
-        page_size: 20,
-      });
-      setTransacciones(data);
-      setTransaccionesPage(page);
-    } catch {
-      setTransacciones(null);
-    } finally {
-      setTransaccionesLoading(false);
-    }
-  }, [token, primarySelectedSedeId, dateRange.start, dateRange.end, transaccionesTipoItem, transaccionesProfesional]);
 
-  useEffect(() => {
-    if (viewMode === "dashboard") void loadTransacciones(1);
-  }, [viewMode, loadTransacciones]);
+
+  const toggleSettingsCategory = useCallback((cat: string) => {
+    setSettingsOpenCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  }, []);
+
+  const getServiceTagsForStylist = useCallback(
+    (stylist: Estilista): string[] => {
+      const details = Array.isArray(stylist.especialidades_detalle)
+        ? stylist.especialidades_detalle
+        : [];
+      if (details.length > 0) {
+        return details.map((d) => d.nombre || "").filter(Boolean);
+      }
+      const specs = Array.isArray(stylist.especialidades) ? stylist.especialidades : [];
+      return specs.filter((s): s is string => typeof s === "string" && Boolean(s));
+    },
+    [],
+  );
+
+  const getServiceCategoriesGrouped = useCallback(() => {
+    if (!editorState) return new Map<string, { serviceId: string; nombre: string; categoria: string }[]>();
+    const grouped = new Map<string, { serviceId: string; nombre: string; categoria: string }[]>();
+    for (const sId of editorState.serviceIds) {
+      const svc = serviceOptionsById.get(sId);
+      const cat = svc?.categoria || "Sin categoría";
+      if (!grouped.has(cat)) grouped.set(cat, []);
+      grouped.get(cat)!.push({ serviceId: sId, nombre: svc?.nombre || sId, categoria: cat });
+    }
+    return grouped;
+  }, [editorState, serviceOptionsById]);
 
   const handleOpenCreate = () => {
     if (LegacyCreateModal) {
@@ -2127,12 +2104,9 @@ export function StylistsTeamWorkspace({
     initializeEditorState(null, "create");
   };
 
-  const canPersistServiceCommissions =
-    typeof stylistApi.updateServiceCommissions === "function";
-
   if (authLoading || isBootLoading) {
     return (
-      <div className="flex flex-col min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex flex-col min-h-screen items-center justify-center bg-white">
         <div className="flex items-center gap-3 text-gray-700">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span>Cargando módulo de equipo...</span>
@@ -2142,44 +2116,31 @@ export function StylistsTeamWorkspace({
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 text-gray-900">
+    <div className="flex flex-col h-screen bg-white text-gray-900">
       <Sidebar />
 
-      <main className="flex-1 overflow-auto">
-        <div className="p-4 md:p-8">
-          <PageHeader
-            title={
-              viewMode === "dashboard"
-                ? "Estilistas"
-                : "Configuración de Estilistas"
-            }
-            actions={
-              <div className="flex flex-wrap items-center gap-2">
-                {viewMode === "dashboard" ? (
+      <main className={`flex-1 ${viewMode === "settings" ? "overflow-hidden" : "overflow-auto"}`}>
+        <div className={viewMode === "settings" ? "flex flex-col h-full overflow-hidden" : "p-4 md:p-8"}>
+          {viewMode === "dashboard" && (
+            <PageHeader
+              title="Estilistas"
+              actions={
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant="default"
                     className={PRIMARY_BUTTON_CLASS}
-                    onClick={() => setViewMode("settings")}
+                    onClick={() => { setSettingsPanelClosed(true); setSelectedStylistId(""); setEditorState(null); setViewMode("settings"); }}
                   >
                     <Settings2 className="mr-2 h-4 w-4" />
                     Configuración de Estilistas
                   </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={OUTLINE_BUTTON_CLASS}
-                    onClick={() => setViewMode("dashboard")}
-                  >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Volver al dashboard
-                  </Button>
-                )}
-              </div>
-            }
-          />
+                </div>
+              }
+            />
+          )}
 
+          {viewMode === "dashboard" && (
           <div className="mt-4">
             {shouldShowSedeDropdown ? (
               <div className="mb-2 flex items-center gap-2">
@@ -2204,12 +2165,15 @@ export function StylistsTeamWorkspace({
                 Sede: <span className="font-semibold text-slate-700">{selectedSedeLabel}</span>
               </p>
             ) : null}
-            <PeriodoSelector
-              periodoActivo={periodoActivo}
-              onPeriodoChange={handlePeriodoChange}
-              rangoAplicado={rangoAplicado}
-            />
+            {viewMode === "dashboard" && (
+              <PeriodoSelector
+                periodoActivo={periodoActivo}
+                onPeriodoChange={handlePeriodoChange}
+                rangoAplicado={rangoAplicado}
+              />
+            )}
           </div>
+          )}
 
           {bootError ? (
             <div className={ERROR_ALERT_CLASS}>
@@ -2372,381 +2336,524 @@ export function StylistsTeamWorkspace({
                 )}
               </section>
 
-              {/* ── Detalle de Transacciones ─────────────────────────────── */}
-              <section className={`${PANEL_CLASS} p-6`}>
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Detalle de Transacciones</h2>
-                    <p className="text-sm text-gray-500">
-                      Registro individual de servicios, productos y otros ítems facturados.
-                    </p>
+            </div>
+          ) : (
+            <div className="gle-settings-layout">
+              {/* ── LEFT PANEL: Stylist List ── */}
+              <div className="gle-left-panel">
+                {/* Header inside left panel */}
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
+                    Configuración de Estilistas
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={OUTLINE_BUTTON_CLASS}
+                      onClick={() => setViewMode("dashboard")}
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Volver al dashboard
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      className={PRIMARY_BUTTON_CLASS}
+                      onClick={handleOpenCreate}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Nuevo estilista
+                    </Button>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                </div>
+
+                {/* Sede selector */}
+                {shouldShowSedeDropdown ? (
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-medium">Sede:</span>
                     <select
-                      value={transaccionesTipoItem}
-                      onChange={(e) => { setTransaccionesTipoItem(e.target.value); void loadTransacciones(1); }}
-                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none"
+                      value={selectedSedeId}
+                      onChange={(event) => setSelectedSedeId(event.target.value)}
+                      className="px-2 py-[5px] border border-slate-200 rounded-lg text-xs bg-white font-semibold text-slate-700 focus:outline-none"
                     >
-                      <option value="todos">Todos los tipos</option>
-                      <option value="servicio">Servicio</option>
-                      <option value="producto">Producto</option>
-                      <option value="membresia">Membresía</option>
-                      <option value="paquete">Paquete</option>
-                    </select>
-                    <select
-                      value={transaccionesProfesional}
-                      onChange={(e) => { setTransaccionesProfesional(e.target.value); void loadTransacciones(1); }}
-                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm focus:outline-none"
-                    >
-                      <option value="">Todos los profesionales</option>
-                      {filteredStylists.map((s) => (
-                        <option key={s.profesional_id} value={s.profesional_id}>
-                          {s.nombre}
+                      {canSelectAllSedes ? (
+                        <option value={ALL_SEDES_VALUE}>Todas las sedes</option>
+                      ) : null}
+                      {visibleSedes.map((sede) => (
+                        <option key={sede.sede_id} value={sede.sede_id}>
+                          {formatSedeNombre(sede.nombre, sede.sede_id)}
                         </option>
                       ))}
                     </select>
                   </div>
+                ) : selectedSedeLabel ? (
+                  <p className="mb-3 text-xs text-slate-500">
+                    Sede: <span className="font-semibold text-slate-700">{selectedSedeLabel}</span>
+                  </p>
+                ) : null}
+
+                {/* Toolbar */}
+                <div className="gle-toolbar">
+                  <div className="gle-search-wrap">
+                    <Search className="h-[14px] w-[14px]" />
+                    <input
+                      className="gle-search-input text-[13px]"
+                      type="text"
+                      placeholder="Buscar estilista..."
+                      value={settingsSearch}
+                      onChange={(e) => setSettingsSearch(e.target.value)}
+                    />
+                  </div>
+                  {(["todos", "activos", "inactivos"] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      className={`gle-filter-pill text-[12px] ${settingsFilter === f ? "active" : ""}`}
+                      onClick={() => setSettingsFilter(f)}
+                    >
+                      {f === "todos" ? "Todos" : f === "activos" ? "Activos" : "Inactivos"}
+                    </button>
+                  ))}
                 </div>
 
-                {transaccionesLoading ? (
-                  <div className="flex items-center justify-center py-10 text-gray-400">
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando transacciones…
+                {/* Table */}
+                <div className="gle-table-card">
+                  <div className="gle-table-head gle-table-head-5col">
+                    <div className="gle-th text-[11px]">Estilista</div>
+                    <div className="gle-th text-[11px]">Sede</div>
+                    <div className="gle-th text-[11px]">Servicios</div>
+                    <div className="gle-th text-[11px]">Estado</div>
+                    <div className="gle-th text-[11px]" />
                   </div>
-                ) : transacciones && transacciones.items.length > 0 ? (
+
+                  {filteredSettingsStylists.length === 0 ? (
+                    <div className="px-10 py-10 text-center">
+                      <p className="text-[13px]" style={{ color: "var(--gle-text-tertiary)" }}>
+                        No hay estilistas para mostrar.
+                      </p>
+                    </div>
+                  ) : (
+                    filteredSettingsStylists.map((stylist) => {
+                      const isSelected = selectedStylistId === stylist.profesional_id;
+                      const tags = getServiceTagsForStylist(stylist);
+                      const sedeObj = sedes.find((s) => s.sede_id === stylist.sede_id);
+                      const sedeLabel = sedeObj
+                        ? formatSedeNombre(sedeObj.nombre, sedeObj.sede_id)
+                        : "—";
+
+                      return (
+                        <div
+                          key={stylist.profesional_id}
+                          className={`gle-stylist-row gle-stylist-row-5col ${isSelected ? "selected" : ""}`}
+                          onClick={() => {
+                            setSettingsPanelClosed(false);
+                            setSelectedStylistId(stylist.profesional_id);
+                            initializeEditorState(stylist, "edit");
+                            setSettingsTab("datos");
+                          }}
+                        >
+                          <div className="gle-stylist-identity">
+                            <div className="gle-avatar text-[12px]" style={{ background: "#111111", color: "#ffffff" }}>
+                              {getInitials(stylist.nombre)}
+                            </div>
+                            <div>
+                              <div className="gle-stylist-name text-[13px]">{stylist.nombre}</div>
+                              <div className="gle-stylist-email text-[11px]">{stylist.email}</div>
+                            </div>
+                          </div>
+                          <div className="gle-cell-secondary text-[12px]">{sedeLabel}</div>
+                          <div>
+                            {tags.length > 0 ? (
+                              <div className="gle-service-tags">
+                                {tags.slice(0, 2).map((tag) => (
+                                  <span key={tag} className="gle-service-tag text-[11px]">{tag}</span>
+                                ))}
+                                {tags.length > 2 && (
+                                  <span className="gle-service-tag more text-[11px]">+{tags.length - 2}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[12px]" style={{ color: "var(--gle-text-tertiary)" }}>
+                                Sin servicios asignados
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <span className={`gle-status-badge text-[11px] ${stylist.activo ? "active" : "inactive"}`}>
+                              <span className="gle-status-dot" />
+                              {stylist.activo ? "Activo" : "Inactivo"}
+                            </span>
+                          </div>
+                          <div className="gle-row-actions">
+                            <button
+                              type="button"
+                              className="gle-icon-btn"
+                              title="Editar"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSettingsPanelClosed(false);
+                                setSelectedStylistId(stylist.profesional_id);
+                                initializeEditorState(stylist, "edit");
+                                setSettingsTab("datos");
+                              }}
+                            >
+                              <Edit3 className="h-[13px] w-[13px]" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* ── RIGHT PANEL: Edit/Detail ── */}
+              <div className={`gle-right-panel ${!editorState ? "collapsed" : ""}`}>
+                {editorState ? (
                   <>
-                    <div className={TABLE_WRAPPER_CLASS}>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                          <thead className={TABLE_HEAD_CLASS}>
-                            <tr>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Fecha</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Comprobante</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Tipo</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Responsable</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Tipo Ítem</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Nombre</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Cant.</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>P. Unitario</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Subtotal</th>
-                              <th className={TABLE_HEAD_CELL_CLASS}>Comisión</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white">
-                            {transacciones.items.map((item: TransaccionItem, idx: number) => (
-                              <tr key={`${item.comprobante}-${idx}`} className={TABLE_ROW_CLASS}>
-                                <td className={TABLE_CELL_CLASS}>{item.fecha?.slice(0, 10) ?? "–"}</td>
-                                <td className={TABLE_CELL_CLASS}>{item.comprobante || "–"}</td>
-                                <td className={TABLE_CELL_CLASS}>{item.tipo || "–"}</td>
-                                <td className={TABLE_CELL_CLASS}>{item.responsable || "–"}</td>
-                                <td className={TABLE_CELL_CLASS}>{item.tipo_item || "–"}</td>
-                                <td className={TABLE_CELL_CLASS}>{item.nombre_item || "–"}</td>
-                                <td className={TABLE_CELL_CLASS}>{item.cantidad}</td>
-                                <td className={TABLE_CELL_CLASS}>{formatCurrencyNoDecimals(item.precio_unitario, currency)}</td>
-                                <td className={TABLE_CELL_CLASS}>{formatCurrencyNoDecimals(item.subtotal, currency)}</td>
-                                <td className={TABLE_CELL_CLASS}>
-                                  {formatCurrencyNoDecimals(item.comision, currency)}
-                                  {item.porcentaje_comision > 0 && (
-                                    <span className="ml-1 text-[10px] text-gray-400">({item.porcentaje_comision}%)</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    {/* Panel Header */}
+                    <div className="gle-panel-header">
+                      <div className="gle-panel-top-row">
+                        <div className="flex items-center gap-[10px]">
+                          <div className="gle-avatar-lg text-[18px]" style={{ background: "#111111", color: "#ffffff" }}>
+                            {getInitials(editorState.nombre || "ST")}
+                          </div>
+                          <div>
+                            <div className="gle-panel-title text-[15px]">
+                              {editorState.nombre || "Nuevo estilista"}
+                            </div>
+                            <div className="text-[12px]" style={{ color: "var(--gle-text-tertiary)" }}>
+                              {editorState.mode === "edit"
+                                ? `${getRoleLabel(editorState.rol)} · ${selectedSedeLabel}`
+                                : "Sin asignar"}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="gle-close-btn text-[16px]"
+                          onClick={() => {
+                            setSettingsPanelClosed(true);
+                            setSelectedStylistId("");
+                            setEditorState(null);
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Tabs */}
+                      <div className="gle-panel-tabs">
+                        {(["datos", "sedes", "servicios", "productos"] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            type="button"
+                            className={`gle-ptab ${settingsTab === tab ? "active" : ""}`}
+                            onClick={() => setSettingsTab(tab)}
+                          >
+                            {tab === "datos" ? "Datos" : tab === "sedes" ? "Sede" : tab === "servicios" ? "Comisiones servicios" : "Comisiones productos"}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                    {/* Paginación */}
-                    {transacciones.pages > 1 && (
-                      <div className="mt-3 flex items-center justify-between text-sm text-gray-500">
-                        <span>
-                          Página {transacciones.page} de {transacciones.pages} · {transacciones.total} registros
-                        </span>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={transacciones.page <= 1}
-                            onClick={() => void loadTransacciones(transacciones.page - 1)}
-                            className="rounded border border-gray-300 px-3 py-1 text-xs disabled:opacity-40 hover:bg-gray-50"
-                          >
-                            ← Anterior
-                          </button>
-                          <button
-                            type="button"
-                            disabled={transacciones.page >= transacciones.pages}
-                            onClick={() => void loadTransacciones(transacciones.page + 1)}
-                            className="rounded border border-gray-300 px-3 py-1 text-xs disabled:opacity-40 hover:bg-gray-50"
-                          >
-                            Siguiente →
-                          </button>
+
+                    {/* Panel Body */}
+                    <div className="gle-panel-body">
+
+                      {/* ── TAB: DATOS ── */}
+                      {settingsTab === "datos" && (
+                        <div>
+                          <div className="gle-form-section">
+                            <div className="gle-avatar-uploader">
+                              <div className="gle-avatar-lg text-[18px]" style={{ background: "#111111", color: "#ffffff" }}>
+                                {getInitials(editorState.nombre || "ST")}
+                              </div>
+                              <div>
+                                <div className="text-[13px] font-medium" style={{ color: "var(--gle-text-primary)" }}>Foto de perfil</div>
+                                <div className="text-[11px]" style={{ color: "var(--gle-text-tertiary)" }}>JPG o PNG · máx 2 MB</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="gle-form-section">
+                            <div className="gle-form-section-label text-[11px]">Información personal</div>
+                            <div className="gle-form-grid-2">
+                              <div className="gle-form-group full">
+                                <label className="gle-form-label text-[12px]">Nombre completo</label>
+                                <input
+                                  className="gle-form-input text-[13px]"
+                                  type="text"
+                                  value={editorState.nombre}
+                                  onChange={(e) => updateEditor("nombre", e.target.value)}
+                                  placeholder="Nombre completo"
+                                />
+                              </div>
+                              <div className="gle-form-group">
+                                <label className="gle-form-label text-[12px]">Correo electrónico</label>
+                                <input
+                                  className="gle-form-input text-[13px]"
+                                  type="email"
+                                  value={editorState.email}
+                                  onChange={(e) => updateEditor("email", e.target.value)}
+                                  placeholder="nombre@correo.com"
+                                />
+                              </div>
+                              <div className="gle-form-group">
+                                <label className="gle-form-label text-[12px]">Teléfono</label>
+                                <input
+                                  className="gle-form-input text-[13px]"
+                                  type="tel"
+                                  value={editorState.telefono}
+                                  onChange={(e) => updateEditor("telefono", e.target.value)}
+                                  placeholder="+57 300 000 0000"
+                                />
+                              </div>
+                              <div className="gle-form-group">
+                                <label className="gle-form-label text-[12px]">Cargo</label>
+                                <select
+                                  className="gle-form-select text-[13px]"
+                                  value={editorState.rol}
+                                  disabled
+                                >
+                                  <option value={editorState.rol}>{getRoleLabel(editorState.rol)}</option>
+                                </select>
+                              </div>
+                              <div className="gle-form-group">
+                                <label className="gle-form-label text-[12px]">Estado</label>
+                                <select
+                                  className="gle-form-select text-[13px]"
+                                  value={editorState.activo ? "activo" : "inactivo"}
+                                  onChange={(e) => updateEditor("activo", e.target.value === "activo")}
+                                >
+                                  <option value="activo">Activo</option>
+                                  <option value="inactivo">Inactivo</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="gle-form-section">
+                            <div className="gle-form-section-label text-[11px]">Acceso al sistema</div>
+                            <div className="gle-form-grid-2">
+                              <div className="gle-form-group">
+                                <label className="gle-form-label text-[12px]">Comisión base</label>
+                                <input
+                                  className="gle-form-input text-[13px]"
+                                  type="text"
+                                  value={editorState.comision}
+                                  onChange={(e) => updateEditor("comision", e.target.value)}
+                                  placeholder="Ej: 20"
+                                />
+                              </div>
+                              {editorState.mode === "create" ? (
+                                <div className="gle-form-group">
+                                  <label className="gle-form-label text-[12px]">Contraseña</label>
+                                  <input
+                                    className="gle-form-input text-[13px]"
+                                    type="password"
+                                    value={editorState.password}
+                                    onChange={(e) => updateEditor("password", e.target.value)}
+                                    placeholder="Mínimo 6 caracteres"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="gle-form-group">
+                                  <label className="gle-form-label text-[12px]">Contraseña</label>
+                                  <input
+                                    className="gle-form-input text-[13px]"
+                                    type="password"
+                                    placeholder="••••"
+                                    value={editorState.password}
+                                    onChange={(e) => updateEditor("password", e.target.value)}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-sm text-gray-500 text-center">
-                    No hay transacciones para el período y filtros seleccionados.
-                  </div>
-                )}
-              </section>
-            </div>
-          ) : (
-            <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-              <section className={`${PANEL_CLASS} p-6`}>
-                <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-                  <div className="flex items-center gap-6 border-b border-gray-200">
-                    <button
-                      type="button"
-                      className="border-b-2 border-black pb-3 text-sm font-semibold text-gray-900"
-                      onClick={() =>
-                        commissionsSectionRef.current?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        })
-                      }
-                    >
-                      Estilistas
-                    </button>
-                    <button
-                      type="button"
-                      className="pb-3 text-sm font-medium text-gray-500"
-                      onClick={() =>
-                        commissionsSectionRef.current?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        })
-                      }
-                    >
-                      Configurar Comisiones
-                    </button>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={OUTLINE_BUTTON_CLASS}
-                    onClick={handleOpenCreate}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nuevo estilista
-                  </Button>
-                </div>
+                      )}
 
-                <div className="space-y-8">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Estilistas del equipo</h2>
-
-                    <div className={`mt-4 ${TABLE_WRAPPER_CLASS}`}>
-                      {filteredStylists.length === 0 ? (
-                        <EmptyPanel
-                          title="No hay estilistas para configurar"
-                          description="Esta sede todavía no tiene estilistas activos en el módulo."
-                        />
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead className={TABLE_HEAD_CLASS}>
-                              <tr>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Estilistas
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Servicios
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Configurar
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white">
-                              {filteredStylists.map((stylist) => {
-                                const isSelected =
-                                  selectedStylistId === stylist.profesional_id &&
-                                  editorState?.mode === "edit";
-                                const servicesCount = Array.isArray(stylist.especialidades_detalle)
-                                  ? stylist.especialidades_detalle.length
-                                  : 0;
-
+                      {/* ── TAB: SEDES ── */}
+                      {settingsTab === "sedes" && (
+                        <div>
+                          <div className="gle-form-section">
+                            <div className="gle-form-section-label text-[11px]">Sede principal</div>
+                            <div className="gle-sede-selector">
+                              {visibleSedes.map((sede) => {
+                                const isSedeSelected = editorState.sede_id === sede.sede_id;
                                 return (
-                                  <tr
-                                    key={stylist.profesional_id}
-                                    className={`cursor-pointer transition ${
-                                      isSelected ? "bg-gray-100" : TABLE_ROW_CLASS
-                                    }`}
-                                    onClick={() => {
-                                      setSelectedStylistId(stylist.profesional_id);
-                                      initializeEditorState(stylist, "edit");
-                                    }}
+                                  <div
+                                    key={sede.sede_id}
+                                    className={`gle-sede-option ${isSedeSelected ? "selected" : ""}`}
+                                    onClick={() => updateEditor("sede_id", sede.sede_id)}
                                   >
-                                    <td className={TABLE_CELL_CLASS}>
-                                      <div className="flex items-center gap-3">
-                                        <Avatar className="h-9 w-9 border border-gray-300 bg-gray-100">
-                                          <AvatarFallback className="bg-gray-200 text-[11px] font-semibold text-gray-700">
-                                            {getInitials(stylist.nombre)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div className="min-w-0">
-                                          <p className="truncate font-medium text-gray-900">
-                                            {stylist.nombre}
-                                          </p>
-                                        </div>
+                                    <div>
+                                      <div className="gle-sede-option-name text-[13px]">
+                                        {formatSedeNombre(sede.nombre, sede.sede_id)}
                                       </div>
-                                    </td>
-                                    <td className={TABLE_CELL_CLASS}>
-                                      {servicesCount > 0 ? "Configurar" : "Sin servicios"}
-                                    </td>
-                                    <td className={TABLE_CELL_CLASS}>
-                                      <Badge
-                                        variant="outline"
-                                        className={`${BADGE_BASE_CLASS} border-gray-300 bg-gray-100 text-gray-700`}
-                                      >
-                                        {stylist.comision !== null && stylist.comision !== undefined
-                                          ? `${stylist.comision}%`
-                                          : "--"}
-                                      </Badge>
-                                    </td>
-                                  </tr>
+                                      <div className="gle-sede-option-city text-[11px]">
+                                        {sede.direccion || sede.pais || ""}
+                                      </div>
+                                    </div>
+                                    <div className="gle-sede-check">
+                                      <div className="gle-sede-check-dot" />
+                                    </div>
+                                  </div>
                                 );
                               })}
-                            </tbody>
-                          </table>
+                            </div>
+                          </div>
+
+                          <div className="gle-hint-box text-[12px]">
+                            La sede seleccionada determina en qué agenda aparece el estilista y qué reportes financieros lo incluyen.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── TAB: COMISIONES SERVICIOS ── */}
+                      {settingsTab === "servicios" && (
+                        <div>
+                          {/* Base commission */}
+                          <div className="gle-base-commission-box">
+                            <div>
+                              <div className="gle-base-comm-label text-[13px]">Comisión base por servicio</div>
+                              <div className="gle-base-comm-desc text-[11px]">Se aplica cuando el servicio no tiene % específico</div>
+                            </div>
+                            <div className="flex items-center gap-[6px]">
+                              <div className="gle-commission-input-wrap" style={{ width: 64 }}>
+                                <input
+                                  className="gle-commission-input text-[13px]"
+                                  type="number"
+                                  value={editorState.comision}
+                                  onChange={(e) => updateEditor("comision", e.target.value)}
+                                  min={0}
+                                  max={100}
+                                />
+                                <span className="gle-commission-symbol text-[12px]">%</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="gle-hint-box text-[12px]">
+                            Puedes sobrescribir el % para cada categoría de servicio. Las categorías sin % específico usarán la comisión base.
+                          </div>
+
+                          {/* Grouped by category */}
+                          {(() => {
+                            const grouped = getServiceCategoriesGrouped();
+                            return Array.from(grouped.entries()).map(([cat, svcs]) => {
+                              const isOpen = settingsOpenCategories.has(cat);
+                              return (
+                                <div key={cat} className="mb-[6px]">
+                                  <div className="gle-cat-header" onClick={() => toggleSettingsCategory(cat)}>
+                                    <div className="gle-cat-header-name text-[12px]">
+                                      {cat}
+                                      <span className="gle-cat-count text-[11px]">{svcs.length} servicio{svcs.length !== 1 ? "s" : ""}</span>
+                                    </div>
+                                    <span className={`gle-cat-expand text-[12px] ${isOpen ? "open" : ""}`}>▾</span>
+                                  </div>
+                                  {isOpen && (
+                                    <div>
+                                      <div className="gle-cat-divider" />
+                                      {svcs.map(({ serviceId, nombre }) => {
+                                        const entry = editorState.serviceCommissions.find(
+                                          (e) => e.servicio_id === serviceId,
+                                        ) ?? { servicio_id: serviceId, valor: 0, tipo: "%" };
+                                        return (
+                                          <div key={serviceId} className="gle-commission-row">
+                                            <div>
+                                              <div className="gle-commission-label text-[13px]">{nombre}</div>
+                                            </div>
+                                            <div className="gle-commission-input-wrap">
+                                              <input
+                                                className="gle-commission-input text-[13px]"
+                                                type="number"
+                                                value={entry.valor}
+                                                onChange={(e) =>
+                                                  updateServiceCommission(serviceId, {
+                                                    valor: Number(e.target.value || 0),
+                                                  })
+                                                }
+                                              />
+                                              <span className="gle-commission-symbol text-[12px]">%</span>
+                                            </div>
+                                            <div className="gle-type-toggle">
+                                              <button type="button" className="active text-[11px]">%</button>
+                                              <button type="button" className="text-[11px]">$</button>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="gle-del-btn"
+                                              onClick={() => removeServiceSelection(serviceId)}
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
+
+                          <button
+                            type="button"
+                            className="gle-add-line-btn text-[12px]"
+                            onClick={addServiceToEditor}
+                            disabled={
+                              selectServiceOptions.filter(
+                                (option) => !editorState.serviceIds.includes(option.id),
+                              ).length === 0
+                            }
+                          >
+                            <Plus className="h-[14px] w-[14px]" />
+                            Agregar servicio
+                          </button>
+                        </div>
+                      )}
+
+                      {/* ── TAB: COMISIONES PRODUCTOS ── */}
+                      {settingsTab === "productos" && (
+                        <div>
+                          <div className="gle-base-commission-box">
+                            <div>
+                              <div className="gle-base-comm-label text-[13px]">Comisión base por producto</div>
+                              <div className="gle-base-comm-desc text-[11px]">Se aplica a todos los productos que venda este estilista</div>
+                            </div>
+                            <div className="flex items-center gap-[6px]">
+                              <div className="gle-commission-input-wrap" style={{ width: 64 }}>
+                                <input
+                                  className="gle-commission-input text-[13px]"
+                                  type="number"
+                                  value={editorState.productCommission}
+                                  onChange={(e) => updateEditor("productCommission", e.target.value)}
+                                  min={0}
+                                  max={100}
+                                />
+                                <span className="gle-commission-symbol text-[12px]">%</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="gle-hint-box text-[12px]">
+                            Las comisiones por producto aplican cuando el estilista registra una venta de producto en facturación. Puedes definir % diferente por categoría de producto o por proveedor.
+                          </div>
+
+                          <p className="mt-2 text-[12px]" style={{ color: "var(--gle-text-tertiary)" }}>
+                            Opcional. Valor entre 0 y 100. Si se deja vacío se usará la comisión del inventario/sede o la global del producto.
+                          </p>
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  <div ref={commissionsSectionRef}>
-                    <h3 className="text-xl font-semibold text-gray-900">Configurar Comisiones</h3>
-
-                    <div className={`mt-4 ${TABLE_WRAPPER_CLASS}`}>
-                      {filteredStylists.length === 0 ? (
-                        <EmptyPanel
-                          title="Sin registros para configurar"
-                          description="Cuando existan estilistas en la sede, verás aquí el resumen de comisiones."
-                        />
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead className={TABLE_HEAD_CLASS}>
-                              <tr>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Nombre
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Correo
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Teléfono
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Comisión base
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Estado
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white">
-                              {filteredStylists.map((stylist) => (
-                                <tr
-                                  key={`commission-${stylist.profesional_id}`}
-                                  className={`cursor-pointer ${TABLE_ROW_CLASS}`}
-                                  onClick={() => {
-                                    setSelectedStylistId(stylist.profesional_id);
-                                    initializeEditorState(stylist, "edit");
-                                  }}
-                                >
-                                  <td className={TABLE_CELL_MEDIUM_CLASS}>{stylist.nombre}</td>
-                                  <td className={TABLE_CELL_CLASS}>{stylist.email}</td>
-                                  <td className={TABLE_CELL_CLASS}>--</td>
-                                  <td className={TABLE_CELL_MEDIUM_CLASS}>
-                                    {stylist.comision !== null && stylist.comision !== undefined
-                                      ? `${stylist.comision}%`
-                                      : "--"}
-                                  </td>
-                                  <td className={TABLE_CELL_CLASS}>
-                                    <Badge
-                                      variant="outline"
-                                      className={`${BADGE_BASE_CLASS} ${
-                                        stylist.activo
-                                          ? "border-green-200 bg-green-100 text-green-700"
-                                          : "border-gray-300 bg-gray-100 text-gray-600"
-                                      }`}
-                                    >
-                                      {stylist.activo ? "Activo" : "Inactivo"}
-                                    </Badge>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900">Vendedores</h3>
-
-                    <div className={`mt-4 ${TABLE_WRAPPER_CLASS}`}>
-                      {vendorRows.length === 0 ? (
-                        <div className="px-4 py-6 text-sm text-gray-500">
-                          No hay vendedores configurados para esta sede.
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead className={TABLE_HEAD_CLASS}>
-                              <tr>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  Vendedor
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  <HeaderLabel lines={["Total de Ventas", "Productos"]} />
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  <HeaderLabel lines={["Comisiones por", "Productos"]} />
-                                </th>
-                                <th className={TABLE_HEAD_CELL_CLASS}>
-                                  <HeaderLabel lines={["Total", "Comisiones"]} />
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white">
-                              {vendorRows.map((vendor) => (
-                                <tr key={vendor.id} className={TABLE_ROW_CLASS}>
-                                  <td className={TABLE_CELL_CLASS}>
-                                    <p className="font-medium text-gray-900">{vendor.nombre}</p>
-                                    <p className="text-xs text-gray-500">{vendor.email}</p>
-                                  </td>
-                                  <td className={TABLE_CELL_MEDIUM_CLASS}>
-                                    {formatCurrencyNoDecimals(vendor.totalVentaProductos, currency)}
-                                  </td>
-                                  <td className={TABLE_CELL_MEDIUM_CLASS}>
-                                    {formatCurrencyNoDecimals(vendor.comisionesProductos, currency)}
-                                  </td>
-                                  <td className={TABLE_CELL_STRONG_CLASS}>
-                                    {formatCurrencyNoDecimals(vendor.totalComisiones, currency)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <aside className={`${PANEL_CLASS} p-6`}>
-                {editorState ? (
-                  <div className="space-y-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <h2 className="text-xl font-semibold text-gray-900">
-                        {editorState.mode === "create" ? "Nuevo Estilista" : "Editar Estilista"}
-                      </h2>
+                    {/* Panel Footer */}
+                    <div className="gle-panel-footer">
                       <button
                         type="button"
-                        className="rounded-md p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                        className="gle-btn-ghost text-[13px]"
                         onClick={() => {
                           if (selectedStylist) {
                             initializeEditorState(selectedStylist, "edit");
@@ -2754,310 +2861,28 @@ export function StylistsTeamWorkspace({
                             initializeEditorState(null, "create");
                           }
                         }}
+                        disabled={isSaving}
                       >
-                        <X className="h-4 w-4" />
+                        Cancelar
                       </button>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-16 w-16 border border-gray-300 bg-gray-100">
-                        <AvatarFallback className="bg-gray-200 text-lg font-semibold text-gray-700">
-                          {getInitials(editorState.nombre || selectedStylist?.nombre || "ST")}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <p className="truncate text-xl font-semibold text-gray-900">
-                          {editorState.nombre || "Nuevo estilista"}
-                        </p>
-                        <p className="truncate text-sm text-gray-500">
-                          {editorState.mode === "edit"
-                            ? getRoleLabel(editorState.rol)
-                            : "Perfil en creación"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">Datos generales</h3>
-                      <div className="mt-3 grid gap-3">
-                        <div>
-                          <label className={FIELD_LABEL_CLASS}>Nombre</label>
-                          <Input
-                            value={editorState.nombre}
-                            onChange={(event) => updateEditor("nombre", event.target.value)}
-                            className={INPUT_CLASS}
-                            placeholder="Nombre completo"
-                          />
-                        </div>
-
-                        <div>
-                          <label className={FIELD_LABEL_CLASS}>Correo</label>
-                          <Input
-                            value={editorState.email}
-                            onChange={(event) => updateEditor("email", event.target.value)}
-                            className={INPUT_CLASS}
-                            placeholder="nombre@correo.com"
-                          />
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div>
-                        <label className={FIELD_LABEL_CLASS}>
-                              Teléfono
-                            </label>
-                          <Input
-                            value={editorState.telefono}
-                            onChange={(event) => updateEditor("telefono", event.target.value)}
-                            className={INPUT_CLASS}
-                          placeholder="No disponible"
-                        />
-                      </div>
-                      <div>
-                            <label className={FIELD_LABEL_CLASS}>
-                              Cargo o tipo
-                            </label>
-                            <Input
-                              value={getRoleLabel(editorState.rol)}
-                              className={INPUT_CLASS}
-                              disabled
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <div>
-                            <label className={FIELD_LABEL_CLASS}>
-                              Comisión base
-                            </label>
-                            <Input
-                              value={editorState.comision}
-                              onChange={(event) => updateEditor("comision", event.target.value)}
-                              className={INPUT_CLASS}
-                              placeholder="Ej: 20"
-                            />
-                          </div>
-                          <div>
-                            <label className={FIELD_LABEL_CLASS}>
-                              Estado
-                            </label>
-                            <select
-                              value={editorState.activo ? "activo" : "inactivo"}
-                              onChange={(event) =>
-                                updateEditor("activo", event.target.value === "activo")
-                              }
-                              className={SELECT_CLASS}
-                            >
-                              <option value="activo">Activo</option>
-                              <option value="inactivo">Inactivo</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {editorState.mode === "create" ? (
-                          <div>
-                            <label className={FIELD_LABEL_CLASS}>
-                              Contraseña
-                            </label>
-                            <Input
-                              type="password"
-                              value={editorState.password}
-                              onChange={(event) => updateEditor("password", event.target.value)}
-                              className={INPUT_CLASS}
-                              placeholder="Mínimo 6 caracteres"
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-base font-semibold text-gray-900">Servicios que presta</h3>
-                      </div>
-
-                      <div className={`mt-4 ${TABLE_WRAPPER_CLASS}`}>
-                        {editorState.serviceIds.length === 0 ? (
-                          <div className="px-4 py-6 text-sm text-gray-500">
-                            Todavía no hay servicios asignados a este perfil.
-                          </div>
-                        ) : (
-                          <div className="divide-y divide-gray-200">
-                            {editorState.serviceIds.map((serviceId) => {
-                              const service = serviceOptionsById.get(serviceId);
-                              const commissionEntry =
-                                editorState.serviceCommissions.find(
-                                  (entry) => entry.servicio_id === serviceId,
-                                ) ?? { servicio_id: serviceId, valor: 0, tipo: "%" };
-
-                              return (
-                                <div
-                                  key={serviceId}
-                                  className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_110px_84px_40px] md:items-center"
-                                >
-                                  <div>
-                                    <select
-                                      value={serviceId}
-                                      onChange={(event) =>
-                                        updateServiceSelection(serviceId, event.target.value)
-                                      }
-                                      className={SELECT_CLASS}
-                                    >
-                                      {selectServiceOptions.map((optionItem) => (
-                                        <option key={optionItem.id} value={optionItem.id}>
-                                          {optionItem.nombre}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {useCategoryOptions ? (
-                                      <p className="mt-1 text-xs text-gray-500">Categoría</p>
-                                    ) : service ? (
-                                      <p className="mt-1 text-xs text-gray-500">
-                                        {service.duracion} min • {formatCurrencyNoDecimals(service.precio, currency)}
-                                      </p>
-                                    ) : null}
-                                  </div>
-
-                                  <div>
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      step={1}
-                                      max={commissionEntry.tipo === "%" ? 100 : undefined}
-                                      value={commissionEntry.valor}
-                                      disabled={isSaving}
-                                      onChange={(event) =>
-                                        updateServiceCommission(serviceId, {
-                                          valor: Number(event.target.value || 0),
-                                        })
-                                      }
-                                      className={INPUT_CLASS}
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <select
-                                      value="%"
-                                      disabled
-                                      className={SELECT_CLASS}
-                                    >
-                                      <option value="%">%</option>
-                                    </select>
-                                  </div>
-
-                                  <div className="flex justify-end">
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={`h-10 w-10 p-0 ${OUTLINE_BUTTON_CLASS}`}
-                                      onClick={() => removeServiceSelection(serviceId)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="mt-3 flex justify-center">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={OUTLINE_BUTTON_CLASS}
-                          onClick={addServiceToEditor}
-                          disabled={
-                            selectServiceOptions.filter(
-                              (option) => !editorState.serviceIds.includes(option.id),
-                            ).length === 0
-                          }
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Agregar Servicio
-                        </Button>
-                      </div>
-
-                      <div className="mt-3 rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                        {canPersistServiceCommissions
-                          ? "Las comisiones se guardan por categoría con porcentaje. Si varios servicios comparten categoría, se sincronizan automáticamente."
-                          : "Este perfil no tiene configurado un endpoint de guardado para comisiones por servicio."}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">Comisión por productos</h3>
-                      <div className="mt-3 rounded-lg border border-gray-300 bg-white p-4">
-                        <label className={FIELD_LABEL_CLASS}>
-                          Comisión por venta de productos
-                        </label>
-                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_76px_52px]">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.01}
-                            value={editorState.productCommission}
-                            onChange={(event) => updateEditor("productCommission", event.target.value)}
-                            className={INPUT_CLASS}
-                            placeholder="Ej: 10"
-                          />
-                          <Input
-                            value={
-                              editorState.productCommission
-                                ? `${editorState.productCommission}%`
-                                : ""
-                            }
-                            className={`${INPUT_CLASS} text-center`}
-                            readOnly
-                          />
-                          <Input
-                            value="%"
-                            className={`${INPUT_CLASS} text-center`}
-                            readOnly
-                          />
-                        </div>
-                        <p className="mt-2 text-xs text-gray-500">
-                          Opcional. Valor entre 0 y 100. Si se deja vacío se usará la comisión del inventario/sede o la global del producto.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">
-                      <div>
-                        {editorState.mode === "edit" ? (
-                          <Button
+                      <div className="flex items-center gap-[8px]">
+                        {editorState.mode === "edit" && (
+                          <button
                             type="button"
-                            variant="outline"
-                            className="border-red-300 bg-white text-red-700 hover:bg-red-50"
+                            className="gle-btn-ghost text-[12px]"
+                            style={{ color: "var(--gle-destructive-text)", borderColor: "var(--gle-destructive)" }}
                             onClick={handleDelete}
                             disabled={isSaving}
                           >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Eliminar Estilista
-                          </Button>
-                        ) : null}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
+                            Eliminar
+                          </button>
+                        )}
+                        <span className="text-[12px]" style={{ color: "var(--gle-text-tertiary)" }}>
+                          Cambios sin guardar<span className="gle-unsaved-dot" />
+                        </span>
+                        <button
                           type="button"
-                          variant="outline"
-                          className={OUTLINE_BUTTON_CLASS}
-                          onClick={() => {
-                            if (selectedStylist) {
-                              initializeEditorState(selectedStylist, "edit");
-                            } else {
-                              initializeEditorState(null, "create");
-                            }
-                          }}
-                          disabled={isSaving}
-                        >
-                          Cancelar
-                        </Button>
-                        <Button
-                          type="button"
-                          className={PRIMARY_BUTTON_CLASS}
+                          className="gle-btn-primary text-[13px]"
                           onClick={handleSave}
                           disabled={
                             isSaving ||
@@ -3066,28 +2891,13 @@ export function StylistsTeamWorkspace({
                             (editorState.mode === "create" && !editorState.password.trim())
                           }
                         >
-                          {isSaving ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Guardando
-                            </>
-                          ) : (
-                            <>
-                              <Save className="mr-2 h-4 w-4" />
-                              Guardar
-                            </>
-                          )}
-                        </Button>
+                          {isSaving ? "Guardando..." : "Guardar cambios"}
+                        </button>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <EmptyPanel
-                    title="Selecciona un estilista"
-                    description="Desde el panel izquierdo podrás abrir el perfil del equipo y editarlo aquí."
-                  />
-                )}
-              </aside>
+                  </>
+                ) : null}
+              </div>
             </div>
           )}
         </div>

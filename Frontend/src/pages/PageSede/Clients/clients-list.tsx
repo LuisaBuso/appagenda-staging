@@ -1,7 +1,9 @@
 "use client"
-import { memo, useCallback, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback } from 'react'
 import { Search, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react'
 import type { Cliente } from "../../../types/cliente"
+
+export type FilterType = 'Todos' | 'Esta sede' | 'Activos' | 'En riesgo' | 'Perdidos' | 'Nuevos'
 
 interface ClientsListProps {
   onSelectClient: (client: Cliente) => void
@@ -23,9 +25,9 @@ interface ClientsListProps {
   onSearch?: (filtro: string) => void
   searchValue: string
   sedeName?: string
+  activeFilter: FilterType
+  onFilterChange: (f: FilterType) => void
 }
-
-type FilterType = 'Todos' | 'Activos' | 'En riesgo' | 'Perdidos' | 'Nuevos'
 
 const fmt = (n: number) => "$" + Math.round(n).toLocaleString("es-CO")
 const ini = (n: string) =>
@@ -39,13 +41,17 @@ const fmtDate = (s?: string): string => {
 }
 
 const getSegmento = (cliente: Cliente): { label: string; cls: string } => {
+  const seg = cliente.segmento
+  if (seg === 'Activo')    return { label: 'Activa',    cls: 'tag-green'  }
+  if (seg === 'En riesgo') return { label: 'En riesgo', cls: 'tag-red'    }
+  if (seg === 'Perdido')   return { label: 'Perdida',   cls: 'tag-gray'   }
+  // Fallback si el cliente no tiene backfill — umbrales deben coincidir con el backend (120d/180d)
   const days = cliente.diasSinVenir ?? 0
   const hasVisit = Boolean(cliente.ultima_visita)
-  if (!hasVisit && days === 0) return { label: 'Nuevo', cls: 'tag-gray' }
-  if (days <= 30) return { label: 'Activa', cls: 'tag-green' }
-  if (days <= 60) return { label: 'Tibia', cls: 'tag-yellow' }
-  if (days <= 120) return { label: 'En riesgo', cls: 'tag-red' }
-  return { label: 'Perdida', cls: 'tag-gray' }
+  if (!hasVisit && days === 0) return { label: 'Nuevo',     cls: 'tag-gray'   }
+  if (days < 120)              return { label: 'Activa',    cls: 'tag-green'  }
+  if (days <= 180)             return { label: 'En riesgo', cls: 'tag-red'    }
+  return                              { label: 'Perdida',   cls: 'tag-gray'   }
 }
 
 const getRecurrencia = (cliente: Cliente): string => {
@@ -58,8 +64,8 @@ export function ClientsList({
   onSelectClient, onAddClient, clientes, selectedId,
   metadata, error, isFetching = false, isInitialLoading = false,
   onPageChange, onSearch, searchValue, sedeName = 'RF',
+  activeFilter, onFilterChange,
 }: ClientsListProps) {
-  const [activeFilter, setActiveFilter] = useState<FilterType>('Todos')
 
   const totalPages = metadata?.total_paginas ?? 1
   const currentPage = metadata?.pagina ?? 1
@@ -104,11 +110,11 @@ export function ClientsList({
 
         <div className="glw-filter-sep" />
 
-        {(['Todos', 'Activos', 'En riesgo', 'Perdidos', 'Nuevos'] as FilterType[]).map(f => (
+        {(['Todos', 'Esta sede', 'Activos', 'En riesgo', 'Perdidos', 'Nuevos'] as FilterType[]).map(f => (
           <span
             key={f}
             className={`glw-filter-chip ${activeFilter === f ? 'active' : ''}`}
-            onClick={() => setActiveFilter(f)}
+            onClick={() => onFilterChange(f)}
           >
             {f}
           </span>

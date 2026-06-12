@@ -63,6 +63,14 @@ export interface ClientesPaginadosResult {
   metadata: ClientesPaginadosMetadata;
 }
 
+export interface SegmentCounts {
+  total: number;
+  activos: number;
+  en_riesgo: number;
+  perdidos: number;
+  nuevos: number;
+}
+
 // 🔥 INTERFAZ ACTUALIZADA PARA LAS FICHAS DEL CLIENTE
 export interface FichaCliente {
   _id: string;
@@ -207,6 +215,7 @@ const mapCliente = (cliente: any): Cliente => ({
   sede_id: cliente.sede_id || '',
   fecha_creacion: cliente.fecha_creacion || '',
   ultima_visita: cliente.ultima_visita || cliente.fecha_ultima_visita || '',
+  segmento: cliente.segmento || undefined,
   historialCitas: [],
   historialCabello: [],
   historialProductos: []
@@ -271,7 +280,7 @@ const buildClientHeaders = (
 export const clientesService = {
   async getClientesPaginados(
     token: string,
-    params?: { pagina?: number; limite?: number; filtro?: string; sedeId?: string }
+    params?: { pagina?: number; limite?: number; filtro?: string; sedeId?: string; segmento?: string }
   ): Promise<ClientesPaginadosResult> {
     const paginaSolicitada = params?.pagina ?? 1;
     const limiteSolicitado = params?.limite ?? 10;
@@ -348,6 +357,9 @@ export const clientesService = {
     url.searchParams.set("limite", String(limite));
     if (filtro) {
       url.searchParams.set("filtro", filtro);
+    }
+    if (params?.segmento) {
+      url.searchParams.set("segmento", params.segmento);
     }
 
     const response = await fetchWithTimeout(url.toString(), {
@@ -514,7 +526,7 @@ export const clientesService = {
     try {
       console.log(`🔍 Obteniendo fichas para cliente: ${clienteId}`);
 
-      const response = await fetch(`${API_BASE_URL}clientes/fichas/${clienteId}`, {
+      const response = await fetch(`${API_BASE_URL}scheduling/quotes/fichas?cliente_id=${clienteId}&solo_hoy=false&limit=200`, {
         method: 'GET',
         headers: {
           'accept': 'application/json',
@@ -944,6 +956,23 @@ ${datos.observaciones_generales || 'Ninguna'}`;
     document.body.appendChild(link);
     link.click();
     setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); }, 100);
+  },
+
+  async getSegmentCounts(token: string): Promise<SegmentCounts> {
+    const response = await fetchWithTimeout(`${API_BASE_URL}clientes/analytics`, {
+      method: "GET",
+      headers: { accept: "application/json", Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return { total: 0, activos: 0, en_riesgo: 0, perdidos: 0, nuevos: 0 };
+    const data = await response.json();
+    const eb = data?.estado_base ?? {};
+    return {
+      total: eb.total ?? 0,
+      activos: eb.activos ?? 0,
+      en_riesgo: eb.en_riesgo ?? 0,
+      perdidos: eb.perdidos ?? 0,
+      nuevos: eb.sin_visita ?? 0,
+    };
   },
 
 };

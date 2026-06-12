@@ -608,7 +608,7 @@ export default function SuperAdminBilling() {
               {/* Column headers */}
               <div className="flex items-center gap-3 px-3.5 mb-1">
                 <div className="w-8 flex-shrink-0" />
-                <span className="flex-1 text-[9px] font-bold uppercase tracking-[0.5px] text-gray-400">Estilista / Servicio</span>
+                <span className="flex-1 text-[9px] font-bold uppercase tracking-[0.5px] text-gray-400">Cliente / Estilista o Vendedor · Servicio o Producto</span>
                 {selectedSedeId === "todas" && (
                   <span className="hidden sm:block w-28 text-center text-[9px] font-bold uppercase tracking-[0.5px] text-gray-400">Sede</span>
                 )}
@@ -648,16 +648,16 @@ export default function SuperAdminBilling() {
                         className="flex items-center px-3.5 py-2.5 rounded-lg cursor-pointer transition-colors gap-3 mb-0.5 hover:bg-gray-50"
                       >
                         <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                          {getInitials(stylistName)}
+                          {getInitials(clientName || stylistName)}
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-semibold text-gray-900 truncate">
-                            {stylistName}
+                            {clientName || "Sin cliente"}
                           </div>
                           <div className="text-xs text-gray-500 truncate mt-0.5">
-                            <span className="text-gray-400">{clientName}</span>
-                            {clientName && serviceName !== "—" ? " · " : ""}
+                            <span className="text-gray-400">{stylistName}</span>
+                            {stylistName && serviceName !== "—" ? " · " : ""}
                             <span className="font-medium text-gray-700">{serviceName}</span>
                           </div>
                         </div>

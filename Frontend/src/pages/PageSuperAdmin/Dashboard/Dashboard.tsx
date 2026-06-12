@@ -9,6 +9,7 @@ import { formatDateDMY, toLocalYMD, formatLocalDate } from "../../../lib/dateFor
 import { getSedes, getAvailablePeriods, type Sede } from "./Api/analyticsApi";
 import { getStoredCurrency, normalizeCurrencyCode } from "../../../lib/currency";
 import { RefreshCw, Building2, AlertCircle } from "lucide-react";
+import { SedeDropdown } from "../../../components/ui/SedeDropdown";
 import { Badge } from "../../../components/ui/badge";
 import { PeriodoSelector, type PeriodoId } from "../../../components/ui/PeriodoSelector";
 import { Alert, AlertTitle, AlertDescription } from "../../../components/ui/alert";
@@ -160,41 +161,33 @@ export default function DashboardPage() {
     <div className="flex flex-col h-screen bg-white">
       <Sidebar />
 
-      <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-        <div className="max-w-[1300px] mx-auto px-7 py-5 pb-10">
+      <main className="flex-1 overflow-y-auto bg-white">
+        <div className="w-full px-4 md:px-8 py-6 pb-16">
 
           {/* Header */}
-          <div className="flex justify-between items-start mb-4">
+          <div className="flex justify-between items-end mb-7">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-800">Dashboard</h1>
-              <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                <span>Inteligencia de negocio · Super Admin · {activeCurrency}</span>
-                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
-                  {loading ? "–" : sedes.length} sedes
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
-                  Moneda: {activeCurrency}
-                </span>
+              <h1 className="text-2xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+              <div className="text-sm text-gray-500 mt-0.5">
+                Inteligencia operativa · Super Admin · {activeCurrency}
               </div>
             </div>
-            <div className="flex gap-1.5 items-center">
-              <select
+            <div className="flex gap-2 items-center">
+              <SedeDropdown
                 value={selectedSede}
-                onChange={(e) => handleSedeChange(e.target.value)}
-                className="px-3 py-[7px] border border-slate-200 rounded-lg text-xs bg-white font-semibold text-slate-700 focus:outline-none"
-              >
-                <option value="global">Todas las sedes</option>
-                {sedes.map((sede) => (
-                  <option key={sede._id} value={sede.sede_id}>
-                    {formatSedeNombre(sede.nombre, sede.sede_id)}
-                  </option>
-                ))}
-              </select>
+                onChange={handleSedeChange}
+                options={sedes.map((s) => ({ value: s.sede_id, label: formatSedeNombre(s.nombre, s.sede_id) }))}
+                showAll
+                allValue="global"
+                allLabel="Todas las sedes"
+                size="sm"
+                align="right"
+              />
               <button
                 onClick={handleRefresh}
-                className="px-3.5 py-[7px] bg-white border border-slate-200 rounded-lg text-[11px] text-slate-500 font-medium flex items-center gap-1 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-[7px] border border-[#e8e8e6] rounded-[5px] text-[12.5px] font-medium text-[#6b6b68] bg-white hover:bg-[#f7f7f6] hover:text-[#0a0a0a] transition-all"
               >
-                <RefreshCw className="w-3 h-3" /> Actualizar
+                <RefreshCw className="w-[13px] h-[13px]" /> Actualizar
               </button>
             </div>
           </div>
@@ -211,30 +204,30 @@ export default function DashboardPage() {
           )}
 
           {/* Period + Tab filter row */}
-          <div className="flex items-center gap-3 mb-4 flex-wrap">
+          <div className="flex items-center gap-3 mb-8 flex-wrap">
             <PeriodoSelector
               periodoActivo={periodoActivo}
               onPeriodoChange={handlePeriodoChange}
               rangoAplicado={rangoAplicado}
             />
             <div className="ml-auto flex items-center gap-2">
-              <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+              <div className="flex border border-[#e8e8e6] rounded-[5px] overflow-hidden">
                 <button
                   onClick={() => setActiveTab("dashboard")}
-                  className={`px-3.5 py-1.5 text-[11px] font-medium transition-colors ${
+                  className={`px-3.5 py-1.5 text-[13px] font-medium transition-all ${
                     activeTab === "dashboard"
-                      ? "bg-slate-800 text-white"
-                      : "bg-white text-slate-500 hover:bg-slate-50"
+                      ? "bg-[#0a0a0a] text-white"
+                      : "bg-white text-[#6b6b68] hover:bg-[#f7f7f6] hover:text-[#0a0a0a]"
                   }`}
                 >
                   Dashboard
                 </button>
                 <button
                   onClick={() => setActiveTab("sedes")}
-                  className={`px-3.5 py-1.5 text-[11px] font-medium transition-colors border-l border-slate-200 ${
+                  className={`px-3.5 py-1.5 text-[13px] font-medium transition-all border-l border-[#e8e8e6] ${
                     activeTab === "sedes"
-                      ? "bg-slate-800 text-white"
-                      : "bg-white text-slate-500 hover:bg-slate-50"
+                      ? "bg-[#0a0a0a] text-white"
+                      : "bg-white text-[#6b6b68] hover:bg-[#f7f7f6] hover:text-[#0a0a0a]"
                   }`}
                 >
                   Sedes
@@ -249,8 +242,8 @@ export default function DashboardPage() {
               {loading && sedes.length === 0 ? (
                 <div className="flex items-center justify-center h-64">
                   <div className="text-center">
-                    <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-slate-500 text-sm">Cargando dashboard…</p>
+                    <div className="w-10 h-10 border-4 border-[#e8e8e6] border-t-[#0a0a0a] rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-[#6b6b68] text-sm">Cargando dashboard…</p>
                   </div>
                 </div>
               ) : (
@@ -273,65 +266,67 @@ export default function DashboardPage() {
 
           {/* ── SEDES TAB ─────────────────────────────────── */}
           {activeTab === "sedes" && (
-            <div className="bg-white border border-slate-200 rounded-[10px] p-[18px] mb-3.5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[13px] font-bold text-slate-800">Sedes registradas</span>
-                <span className="text-[10px] text-slate-400">{sedes.length} total</span>
+            <div className="bg-white border border-[#e8e8e6] rounded-lg overflow-hidden mb-8">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#e8e8e6]">
+                <span className="text-[13.5px] font-semibold text-[#0a0a0a]">Sedes registradas</span>
+                <span className="text-[11px] text-[#9b9b97]">{sedes.length} total</span>
               </div>
-              <input
-                type="text"
-                placeholder="Buscar sede..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs mb-3 focus:outline-none"
-              />
-              {loadingSedes ? (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-3" />
-                  <p className="text-xs text-slate-400">Cargando sedes…</p>
-                </div>
-              ) : filteredSedes.length === 0 ? (
-                <div className="text-center py-8">
-                  <Building2 className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-                  <p className="text-xs text-slate-400">No se encontraron sedes</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {filteredSedes.map((sede) => (
-                    <div
-                      key={sede._id}
-                      onClick={() => {
-                        handleSedeChange(sede.sede_id);
-                        setActiveTab("dashboard");
-                      }}
-                      className={`p-3 border rounded-lg cursor-pointer transition-colors hover:border-slate-400 ${
-                        selectedSede === sede.sede_id
-                          ? "border-slate-800 bg-slate-50"
-                          : "border-slate-200"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-slate-500" />
-                          <span className="text-xs font-semibold text-slate-800">
-                            {formatSedeNombre(sede.nombre)}
-                          </span>
+              <div className="px-5 py-4">
+                <input
+                  type="text"
+                  placeholder="Buscar sede..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full max-w-[280px] px-3 py-1.5 border border-[#e8e8e6] rounded-[5px] text-[12.5px] bg-[#f7f7f6] text-[#0a0a0a] focus:outline-none focus:border-[#d1d1cf] focus:bg-white mb-4 transition-all"
+                />
+                {loadingSedes ? (
+                  <div className="text-center py-8">
+                    <div className="w-8 h-8 border-4 border-[#e8e8e6] border-t-[#0a0a0a] rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-[12.5px] text-[#9b9b97]">Cargando sedes…</p>
+                  </div>
+                ) : filteredSedes.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Building2 className="w-10 h-10 mx-auto mb-3 text-[#d1d1cf]" />
+                    <p className="text-[12.5px] text-[#9b9b97]">No se encontraron sedes</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {filteredSedes.map((sede) => (
+                      <div
+                        key={sede._id}
+                        onClick={() => {
+                          handleSedeChange(sede.sede_id);
+                          setActiveTab("dashboard");
+                        }}
+                        className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${
+                          selectedSede === sede.sede_id
+                            ? "border-[#0a0a0a] bg-[#f7f7f6]"
+                            : "border-[#e8e8e6] hover:border-[#d1d1cf]"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-[#6b6b68]" />
+                            <span className="text-[13px] font-medium text-[#0a0a0a]">
+                              {formatSedeNombre(sede.nombre)}
+                            </span>
+                          </div>
+                          <div className={`w-[6px] h-[6px] rounded-full mt-1 ${sede.activa ? "bg-[#16a34a]" : "bg-[#d1d1cf]"}`} />
                         </div>
-                        <div className={`w-2 h-2 rounded-full mt-0.5 ${sede.activa ? "bg-green-500" : "bg-slate-300"}`} />
+                        <p className="text-[11.5px] text-[#6b6b68] truncate">{sede.direccion}</p>
+                        <p className="text-[11px] text-[#9b9b97] mt-0.5">{sede.telefono}</p>
+                        {selectedSede === sede.sede_id && (
+                          <div className="mt-2">
+                            <Badge className="text-[9px] bg-[#0a0a0a] text-white px-1.5 py-0.5 rounded font-medium">
+                              Seleccionada
+                            </Badge>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-[10px] text-slate-500 truncate">{sede.direccion}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{sede.telefono}</p>
-                      {selectedSede === sede.sede_id && (
-                        <div className="mt-2">
-                          <Badge className="text-[9px] bg-slate-800 text-white px-1.5 py-0.5 rounded font-medium">
-                            Seleccionada
-                          </Badge>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

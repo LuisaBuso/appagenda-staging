@@ -786,7 +786,7 @@ export default function Billing() {
             <div className="flex items-center gap-3 px-3.5 mb-1">
               <div className="w-8 flex-shrink-0" />
               <span className="flex-1 text-[9px] font-bold uppercase tracking-[0.5px] text-gray-400">
-                Estilista / Servicio
+                Cliente / Estilista o Vendedor · Servicio o Producto
               </span>
               <span className="w-24 text-center text-[9px] font-bold uppercase tracking-[0.5px] text-gray-400">
                 Pago
@@ -856,17 +856,17 @@ export default function Billing() {
                     >
                       {/* Avatar */}
                       <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                        {getInitials(stylistName)}
+                        {getInitials(clientName || stylistName)}
                       </div>
 
                       {/* Names */}
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-gray-900 truncate">
-                          {stylistName}
+                          {clientName || "Sin cliente"}
                         </div>
                         <div className="text-xs text-gray-500 truncate mt-0.5">
-                          <span className="text-gray-400">{clientName}</span>
-                          {clientName && serviceName !== "—" ? " · " : ""}
+                          <span className="text-gray-400">{stylistName}</span>
+                          {stylistName && serviceName !== "—" ? " · " : ""}
                           <span className="font-medium text-gray-700">
                             {serviceName}
                           </span>

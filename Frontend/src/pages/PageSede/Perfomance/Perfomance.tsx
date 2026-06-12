@@ -11,7 +11,7 @@ export default function Performance() {
 
       {/* Main content */}
       <main className="flex-1 overflow-y-auto">
-        <div className="p-12">
+        <div className="p-4 md:p-8">
           {/* Title */}
           <h1 className="text-2xl font-semibold text-gray-900 mb-6">Today's KPIs</h1>
 

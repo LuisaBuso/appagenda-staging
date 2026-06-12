@@ -1,10 +1,12 @@
 "use client"
-import { memo, useCallback, useMemo, useState } from "react"
+import { memo, useCallback, useMemo } from "react"
 import { Search, ChevronLeft, ChevronRight, Loader2, X } from "lucide-react"
 import type { Cliente } from "../../../types/cliente"
 import type { Sede } from "../Sedes/sedeService"
 import type { ClientesPaginadosMetadata } from "./clientesService"
 import { formatSedeNombre } from "../../../lib/sede"
+
+export type FilterType = 'Todos' | 'Activos' | 'En riesgo' | 'Perdidos' | 'Nuevos'
 
 interface ClientsListProps {
   onSelectClient: (client: Cliente) => void
@@ -24,9 +26,9 @@ interface ClientsListProps {
   itemsPerPage?: number
   isFetching?: boolean
   isInitialLoading?: boolean
+  activeFilter: FilterType
+  onFilterChange: (f: FilterType) => void
 }
-
-type FilterType = 'Todos' | 'Activos' | 'En riesgo' | 'Perdidos' | 'Nuevos'
 
 const fmt = (n: number) => "$" + Math.round(n).toLocaleString("es-CO")
 const ini = (n: string) =>
@@ -40,13 +42,16 @@ const fmtDate = (s?: string): string => {
 }
 
 const getSegmento = (cliente: Cliente): { label: string; cls: string } => {
+  const seg = cliente.segmento
+  if (seg === 'Activo')    return { label: 'Activa',    cls: 'tag-green'  }
+  if (seg === 'En riesgo') return { label: 'En riesgo', cls: 'tag-red'    }
+  if (seg === 'Perdido')   return { label: 'Perdida',   cls: 'tag-gray'   }
   const days = cliente.diasSinVenir ?? 0
   const hasVisit = Boolean(cliente.ultima_visita)
-  if (!hasVisit && days === 0) return { label: 'Nuevo', cls: 'tag-gray' }
-  if (days <= 30) return { label: 'Activa', cls: 'tag-green' }
-  if (days <= 60) return { label: 'Tibia', cls: 'tag-yellow' }
-  if (days <= 120) return { label: 'En riesgo', cls: 'tag-red' }
-  return { label: 'Perdida', cls: 'tag-gray' }
+  if (!hasVisit && days === 0) return { label: 'Nuevo',     cls: 'tag-gray'   }
+  if (days < 120)              return { label: 'Activa',    cls: 'tag-green'  }
+  if (days <= 180)             return { label: 'En riesgo', cls: 'tag-red'    }
+  return                              { label: 'Perdida',   cls: 'tag-gray'   }
 }
 
 const getRecurrencia = (cliente: Cliente): string => {
@@ -61,8 +66,8 @@ function ClientsListComponent({
   onPageChange, onSearch, searchValue,
   onSedeChange, selectedSede = "all", sedes = [],
   onItemsPerPageChange, itemsPerPage = 10,
+  activeFilter, onFilterChange,
 }: ClientsListProps) {
-  const [activeFilter, setActiveFilter] = useState<FilterType>('Todos')
 
   const sedeMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -120,7 +125,7 @@ function ClientsListComponent({
           <span
             key={f}
             className={`glw-filter-chip ${activeFilter === f ? 'active' : ''}`}
-            onClick={() => setActiveFilter(f)}
+            onClick={() => onFilterChange(f)}
           >
             {f}
           </span>

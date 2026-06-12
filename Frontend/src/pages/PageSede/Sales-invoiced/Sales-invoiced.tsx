@@ -5,7 +5,7 @@ import { VentasFacturadasList } from "./ventas-facturadas-list"
 
 export default function VentasFacturadasPage() {
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-white">
       <Sidebar />
       <main className="flex-1 overflow-auto">
         <div className="p-4 md:p-8">

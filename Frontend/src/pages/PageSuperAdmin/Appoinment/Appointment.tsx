@@ -13,6 +13,12 @@ import { getBloqueosMultiplesProfesionales, deleteBloqueo, type Bloqueo } from '
 import { formatSedeNombre } from "../../../lib/sede";
 import { extractAgendaAdditionalNotes } from "../../../lib/agenda";
 import { AgendaDatePicker } from "../../PageSede/Appoinment/AgendaDatePicker";
+import WeeklyCalendarView, {
+  getWeekRange,
+  getWeekDays,
+  formatWeekLabel,
+  type WeeklyCita,
+} from "../../../components/Agenda/WeeklyCalendarView";
 
 interface Appointment {
   id: string;
@@ -120,6 +126,13 @@ const CalendarScheduler: React.FC = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showBloqueoModal, setShowBloqueoModal] = useState(false);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+
+  const [vista, setVista] = useState<"dia" | "semana">(() => {
+    const saved = sessionStorage.getItem("agenda-vista");
+    return saved === "semana" ? "semana" : "dia";
+  });
+  const [weekCitas, setWeekCitas] = useState<Record<string, WeeklyCita[]>>({});
+  const [loadingWeek, setLoadingWeek] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ estilista: EstilistaCompleto, hora: string } | null>(null);
   const [citaTooltip, setCitaTooltip] = useState({ visible: false, x: 0, y: 0, cita: null as Appointment | null });
   const [_refreshTrigger, setRefreshTrigger] = useState(0);
@@ -182,6 +195,104 @@ const CalendarScheduler: React.FC = () => {
       return role === "super_admin" || role === "superadmin";
     },
     [user?.role]
+  );
+
+  const weekRange = useMemo(() => getWeekRange(selectedDate), [selectedDate]);
+  const weekDays = useMemo(() => getWeekDays(weekRange.monday), [weekRange.monday]);
+  const weekLabel = useMemo(
+    () => formatWeekLabel(weekRange.monday, weekRange.sunday),
+    [weekRange.monday, weekRange.sunday],
+  );
+
+  useEffect(() => {
+    sessionStorage.setItem("agenda-vista", vista);
+  }, [vista]);
+
+  const extractWeeklyCita = useCallback((cita: any): WeeklyCita => {
+    const clienteNombre =
+      cita?.cliente_nombre || cita?.cliente?.nombre || "(Sin nombre)";
+    const profesionalNombre =
+      cita?.profesional_nombre || cita?.estilista_nombre || "(Sin profesional)";
+    const servicioNombre =
+      cita?.servicio_nombre || "(Sin servicio)";
+    const estado = cita?.estado || cita?.status || "pendiente";
+
+    return {
+      id: cita._id,
+      cliente_nombre: clienteNombre,
+      servicio_nombre: servicioNombre,
+      estilista_nombre: profesionalNombre,
+      hora_inicio: cita.hora_inicio,
+      hora_fin: cita.hora_fin,
+      estado,
+      profesional_id: cita.profesional_id,
+      rawData: cita,
+    };
+  }, []);
+
+  const cargarCitasSemana = useCallback(async () => {
+    if (!user?.access_token || !selectedSede || vista !== "semana") return;
+    setLoadingWeek(true);
+    try {
+      const results: Record<string, WeeklyCita[]> = {};
+      const fetches = weekDays.map(async (day) => {
+        const dateStr =
+          day.getFullYear() +
+          "-" +
+          (day.getMonth() + 1).toString().padStart(2, "0") +
+          "-" +
+          day.getDate().toString().padStart(2, "0");
+        try {
+          const response = await getCitas(
+            { fecha: dateStr, sede_id: selectedSede!.sede_id },
+            user.access_token,
+          );
+          const dayCitas = response.citas || response || [];
+          results[dateStr] = dayCitas
+            .filter((c: any) => c.fecha === dateStr)
+            .map(extractWeeklyCita);
+        } catch {
+          results[dateStr] = [];
+        }
+      });
+      await Promise.all(fetches);
+      setWeekCitas(results);
+    } catch {
+      setWeekCitas({});
+    } finally {
+      setLoadingWeek(false);
+    }
+  }, [user, selectedSede, vista, weekDays, extractWeeklyCita]);
+
+  useEffect(() => {
+    if (vista === "semana" && selectedSede) {
+      cargarCitasSemana();
+    }
+  }, [vista, cargarCitasSemana, selectedSede]);
+
+  const handleWeeklyCitaClick = useCallback(
+    (cita: WeeklyCita) => {
+      const apt: Appointment = {
+        id: cita.id,
+        title: cita.cliente_nombre,
+        profesional: cita.estilista_nombre,
+        start: cita.hora_inicio,
+        end: cita.hora_fin,
+        color: "bg-blue-500",
+        tipo: cita.servicio_nombre,
+        duracion: 0,
+        precio: 0,
+        cliente_nombre: cita.cliente_nombre,
+        servicio_nombre: cita.servicio_nombre,
+        estilista_nombre: cita.estilista_nombre,
+        estado: cita.estado,
+        profesional_id: cita.profesional_id,
+        rawData: cita.rawData,
+      };
+      setSelectedAppointment(apt);
+      setShowAppointmentDetails(true);
+    },
+    [],
   );
 
   // Cargar sedes y respetar el contexto de sede activo.
@@ -1133,11 +1244,11 @@ const CalendarScheduler: React.FC = () => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* ── Top bar ───────────────────────────────────────────────────── */}
         <div
-          className="shrink-0 flex flex-col md:flex-row md:justify-between md:items-center bg-white gap-2 px-4 py-3 md:px-[22px] md:py-[14px]"
+          className="shrink-0 flex flex-col md:flex-row md:justify-between md:items-center bg-white gap-2 px-4 py-3 md:px-8 md:py-[14px]"
           style={{ borderBottom: '1px solid #E2E8F0' }}
         >
           <div>
-            <h1 className="text-xl font-bold tracking-tight" style={{ color: '#1E293B', letterSpacing: '-.3px' }}>
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900">
               Agenda
             </h1>
             <div className="text-xs mt-0.5" style={{ color: '#64748B' }}>
@@ -1148,12 +1259,46 @@ const CalendarScheduler: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* View toggle */}
+            <div
+              className="flex rounded-lg overflow-hidden"
+              style={{ border: "1px solid #E2E8F0" }}
+            >
+              <button
+                onClick={() => setVista("dia")}
+                className="text-xs font-medium transition-colors"
+                style={{
+                  padding: "6px 12px",
+                  background: vista === "dia" ? "#1a1a2e" : "transparent",
+                  color: vista === "dia" ? "#fff" : "#64748B",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                Día
+              </button>
+              <button
+                onClick={() => setVista("semana")}
+                className="text-xs font-medium transition-colors"
+                style={{
+                  padding: "6px 12px",
+                  background: vista === "semana" ? "#1a1a2e" : "transparent",
+                  color: vista === "semana" ? "#fff" : "#64748B",
+                  border: "none",
+                  borderLeft: "1px solid #E2E8F0",
+                  cursor: "pointer",
+                }}
+              >
+                Semana
+              </button>
+            </div>
+
             <div
               className="flex items-center gap-0.5 rounded-lg"
               style={{ background: '#F8FAFC', padding: 3, position: 'relative' }}
             >
               <button
-                onClick={() => setSelectedDate(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; })}
+                onClick={() => setSelectedDate(d => { const n = new Date(d); n.setDate(n.getDate() - (vista === "semana" ? 7 : 1)); return n; })}
                 className="flex items-center rounded-md transition-colors"
                 style={{ padding: '5px 7px', color: '#64748B' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#E2E8F0')}
@@ -1168,10 +1313,10 @@ const CalendarScheduler: React.FC = () => {
                 onMouseEnter={e => (e.currentTarget.style.background = '#E2E8F0')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                {todayLabel}
+                {vista === "semana" ? weekLabel : todayLabel}
               </button>
               <button
-                onClick={() => setSelectedDate(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; })}
+                onClick={() => setSelectedDate(d => { const n = new Date(d); n.setDate(n.getDate() + (vista === "semana" ? 7 : 1)); return n; })}
                 className="flex items-center rounded-md transition-colors"
                 style={{ padding: '5px 7px', color: '#64748B' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#E2E8F0')}
@@ -1236,6 +1381,15 @@ const CalendarScheduler: React.FC = () => {
               <span className="ml-auto"><b className="font-semibold" style={{ color: '#1E293B' }}>{formatCOP(rfSummary.total)}</b> estimado</span>
             </div>
 
+            {vista === "semana" ? (
+              <WeeklyCalendarView
+                weekDays={weekDays}
+                today={today}
+                citasByDay={weekCitas}
+                loading={loadingWeek}
+                onCitaClick={handleWeeklyCitaClick}
+              />
+            ) : (
             <div ref={calendarViewportRef} className="flex-1 overflow-auto bg-white">
               <div className="min-w-max" style={{ minWidth: `${calendarMinWidth}px` }}>
                 {/* ENCABEZADO DE ESTILISTAS */}
@@ -1340,6 +1494,7 @@ const CalendarScheduler: React.FC = () => {
                 )}
               </div>
             </div>
+            )}
 
             {/* ── Legend ────────────────────────────────────────────────── */}
             <div

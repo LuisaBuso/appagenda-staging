@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useSearchParams } from "react-router-dom"
-import { AlertTriangle, Loader2, AlertCircle, Globe, Check, ChevronDown, Building2, ChevronLeft, ChevronRight, Pencil, Plus, Search, SlidersHorizontal } from "lucide-react"
+import { AlertTriangle, Loader2, AlertCircle, Globe, Check, Building2, ChevronLeft, ChevronRight, Pencil, Plus, Search, SlidersHorizontal } from "lucide-react"
+import { SedeDropdown } from "../../../components/ui/SedeDropdown"
 import { Button } from "../../../components/ui/button"
 import { Input } from "../../../components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select"
@@ -101,8 +102,8 @@ export function ProductsList() {
   const [createProductError, setCreateProductError] = useState<string | null>(null)
   const [createProductSuccess, setCreateProductSuccess] = useState<string | null>(null)
 
-  const [isSedeDropdownOpen, setIsSedeDropdownOpen] = useState(false)
-  const sedeDropdownRef = useRef<HTMLDivElement>(null)
+
+
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isCreatingInventario, setIsCreatingInventario] = useState(false)
@@ -315,15 +316,8 @@ export function ProductsList() {
     void cargarVentasProductos()
   }, [selectedDashboardSede, period, dateRange, isAuthenticated, user, sedesDisponibles])
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (sedeDropdownRef.current && !sedeDropdownRef.current.contains(e.target as Node)) {
-        setIsSedeDropdownOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+
+
 
   useEffect(() => {
     const resolved = resolveSedeId()
@@ -923,7 +917,7 @@ export function ProductsList() {
   // Mostrar loading mientras se verifica la autenticación
   if (authLoading) {
     return (
-      <div className="flex flex-col min-h-screen bg-gray-50">
+      <div className="flex flex-col min-h-screen bg-white">
         <Sidebar />
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-gray-400 mb-4" />
@@ -936,7 +930,7 @@ export function ProductsList() {
   // Mostrar mensaje de error si no está autenticado
   if (!isAuthenticated) {
     return (
-      <div className="flex flex-col min-h-screen bg-gray-50">
+      <div className="flex flex-col min-h-screen bg-white">
         <Sidebar />
         <div className="flex-1 flex flex-col items-center justify-center">
           <AlertTriangle className="h-12 w-12 text-red-500 mb-4" />
@@ -1105,7 +1099,7 @@ export function ProductsList() {
       <div className="flex-1">
         {/* Products sub-navigation */}
         <div className="border-b border-gray-200 bg-white px-4 md:px-8 pt-1 flex items-end gap-2 min-w-0">
-          <nav className="flex gap-0 overflow-x-auto flex-1 min-w-0">
+          <nav className="flex gap-0 overflow-x-auto scrollbar-hide flex-1 min-w-0">
             {(
               [
                 { id: "lista", label: "Productos" },
@@ -1130,61 +1124,20 @@ export function ProductsList() {
           </nav>
 
           {/* Sede selector — Vista Global style */}
-          <div className="relative mb-1.5 flex-shrink-0" ref={sedeDropdownRef}>
-            <button
-              onClick={() => setIsSedeDropdownOpen((prev) => !prev)}
-              className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
-            >
-              {selectedDashboardSede === "all" ? (
-                <Globe className="h-4 w-4 text-gray-500 shrink-0" />
-              ) : (
-                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-              )}
-              <span className="max-w-[160px] truncate">
-                {selectedDashboardSede === "all"
-                  ? "Vista Global"
-                  : sedesDisponibles.find((s) => s.sede_id === selectedDashboardSede)?.nombre || "Sede"}
-              </span>
-              <ChevronDown className={cn("h-3.5 w-3.5 text-gray-400 transition-transform", isSedeDropdownOpen && "rotate-180")} />
-            </button>
-
-            {isSedeDropdownOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 bg-white py-1 shadow-lg max-h-80 overflow-y-auto">
-                {/* Vista Global option */}
-                <button
-                  onClick={() => {
-                    setSelectedDashboardSede("all")
-                    setIsSedeDropdownOpen(false)
-                  }}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <Globe className="h-4 w-4 text-gray-500 shrink-0" />
-                  <span className="flex-1 text-left">Vista Global</span>
-                  {selectedDashboardSede === "all" && <Check className="h-4 w-4 text-gray-900" />}
-                </button>
-
-                {/* Divider */}
-                <div className="my-1 border-t border-gray-100" />
-
-                {/* Individual sedes */}
-                {sedesDisponibles.map((sede) => (
-                  <button
-                    key={sede.sede_id}
-                    onClick={() => {
-                      setSelectedDashboardSede(sede.sede_id)
-                      setNuevoSedeId(sede.sede_id)
-                      setIsSedeDropdownOpen(false)
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="flex-1 truncate text-left">{sede.nombre}</span>
-                    {selectedDashboardSede === sede.sede_id && <Check className="h-4 w-4 text-gray-900 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <SedeDropdown
+            value={selectedDashboardSede}
+            onChange={(sedeId) => {
+              setSelectedDashboardSede(sedeId)
+              if (sedeId !== "all") setNuevoSedeId(sedeId)
+            }}
+            options={sedesDisponibles}
+            showAll
+            allValue="all"
+            allLabel="Vista Global"
+            size="sm"
+            align="right"
+            className="mb-1.5"
+          />
         </div>
 
         {activeProductsTab !== "lista" ? (

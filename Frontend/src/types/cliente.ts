@@ -18,6 +18,7 @@ export interface Cliente {
   fecha_creacion?: string;
   fecha_registro?: string;
   ultima_visita?: string;
+  segmento?: string;
   
   // Historiales - ACTUALIZADO: cambiar estilista por profesional
   historialCitas: Array<{
@@ -96,6 +97,7 @@ export interface Cliente {
     }>;
     
     tipo_ficha?: string;
+    contenido?: Record<string, any>;
     datos_especificos?: any;
     descripcion_servicio?: string;
     autorizacion_publicacion?: boolean;

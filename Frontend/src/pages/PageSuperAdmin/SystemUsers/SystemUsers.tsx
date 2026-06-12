@@ -323,7 +323,7 @@ export default function SystemUsersPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <ShieldCheck className="h-5 w-5 text-gray-900" />
-                <h1 className="text-lg font-semibold text-gray-900">Usuarios Sistema</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-gray-900">Usuarios Sistema</h1>
                 <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                   {searchTerm ? `${filteredUsers.length}/${users.length}` : users.length}
                 </span>

@@ -316,7 +316,7 @@ export default function GiftCardsPage() {
 
   if (authLoading) {
     return (
-      <div className="flex flex-col h-screen items-center justify-center bg-gray-50">
+      <div className="flex flex-col h-screen items-center justify-center bg-white">
         <div className="flex items-center gap-3 text-gray-600">
           <Loader2 className="h-5 w-5 animate-spin" />
           Cargando sesión...
@@ -327,7 +327,7 @@ export default function GiftCardsPage() {
 
   return (
     <>
-      <div className="flex flex-col h-screen bg-gray-50">
+      <div className="flex flex-col h-screen bg-white">
         <Sidebar />
 
         <main className="flex-1 overflow-auto">

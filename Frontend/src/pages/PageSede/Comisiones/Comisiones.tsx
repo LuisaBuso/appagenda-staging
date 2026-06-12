@@ -22,11 +22,11 @@ export default function ComisionesPage() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-screen bg-white overflow-hidden">
       <Sidebar />
 
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-7xl p-4 md:p-8">
+        <div className="w-full p-4 md:p-8">
           {/* Header */}
           <PageHeader
             title="Comisiones"

@@ -147,7 +147,7 @@ function ResumenTab({ client }: { client: Cliente }) {
 
 function PerfilCapilarTab({ client }: { client: Cliente }) {
   const lastFicha = client.fichas?.[0]
-  const datos = lastFicha?.datos_especificos
+  const datos = lastFicha?.datos_especificos || lastFicha?.contenido
   const { user } = useAuth()
   const [verTodas, setVerTodas] = useState(false)
   const [descargando, setDescargando] = useState<string | null>(null)
@@ -155,14 +155,18 @@ function PerfilCapilarTab({ client }: { client: Cliente }) {
   const fichasMostradas = verTodas ? fichas : fichas.slice(0, 5)
 
   const fichaRizotipo = fichas.find((f: any) => f.tipo_ficha === 'DIAGNOSTICO_RIZOTIPO')
-  const rizoDatos = fichaRizotipo?.datos_especificos
+  const rizoDatos = fichaRizotipo?.datos_especificos || fichaRizotipo?.contenido
 
-  const getCitaId = (ficha: any): string | undefined =>
-    ficha.contenido?.cita_id || ficha.datos_especificos?.cita_id || ficha.cita_id
+  const getDescargaId = (ficha: any): string | undefined =>
+    ficha.contenido?.cita_id ||       // real cita_id first
+    ficha.datos_especificos?.cita_id ||
+    ficha.cita_id ||
+    ficha.id ||                        // ficha._id as last resort — backend detects this as a direct ficha lookup
+    ficha._id
 
   const handleDescargar = async (ficha: any) => {
     const token = user?.access_token || localStorage.getItem('access_token') || sessionStorage.getItem('access_token')
-    const citaId = getCitaId(ficha)
+    const citaId = getDescargaId(ficha)
     if (!citaId || !token) return
     const fichaKey = ficha._id || ficha.id
     setDescargando(fichaKey)
@@ -184,14 +188,14 @@ function PerfilCapilarTab({ client }: { client: Cliente }) {
       <div className="glw-s-title" style={{ marginTop: 0 }}>Rizotipo</div>
       {rizoDatos ? (
         <div className="glw-cap-grid">
-          <div className="glw-cap-card"><div className="glw-cap-card-label">Exterior Lipídico</div><div className="glw-cap-card-value">{rizoDatos.exterior_lipidico || '—'}</div></div>
-          <div className="glw-cap-card"><div className="glw-cap-card-label">Porosidad</div><div className="glw-cap-card-value">{rizoDatos.porosidad || '—'}</div></div>
-          <div className="glw-cap-card"><div className="glw-cap-card-label">Permeabilidad</div><div className="glw-cap-card-value">{rizoDatos.permeabilidad || '—'}</div></div>
-          <div className="glw-cap-card"><div className="glw-cap-card-label">Plasticidad</div><div className="glw-cap-card-value">{rizoDatos.plasticidad || '—'}</div></div>
-          <div className="glw-cap-card"><div className="glw-cap-card-label">Textura</div><div className="glw-cap-card-value">{rizoDatos.textura || '—'}</div></div>
-          <div className="glw-cap-card"><div className="glw-cap-card-label">Grosor</div><div className="glw-cap-card-value">{rizoDatos.grosor || '—'}</div></div>
-          <div className="glw-cap-card"><div className="glw-cap-card-label">Oleosidad</div><div className="glw-cap-card-value">{rizoDatos.oleosidad || '—'}</div></div>
-          <div className="glw-cap-card"><div className="glw-cap-card-label">Densidad</div><div className="glw-cap-card-value">{rizoDatos.densidad || '—'}</div></div>
+          <div className="glw-cap-card"><div className="glw-cap-card-label">Exterior Lipídico</div><div className="glw-cap-card-value">{rizoDatos.exterior_lipidico_valor || rizoDatos.exterior_lipidico || '—'}</div></div>
+          <div className="glw-cap-card"><div className="glw-cap-card-label">Porosidad</div><div className="glw-cap-card-value">{rizoDatos.porosidad_valor || rizoDatos.porosidad || '—'}</div></div>
+          <div className="glw-cap-card"><div className="glw-cap-card-label">Permeabilidad</div><div className="glw-cap-card-value">{rizoDatos.permeabilidad_valor || rizoDatos.permeabilidad || '—'}</div></div>
+          <div className="glw-cap-card"><div className="glw-cap-card-label">Plasticidad</div><div className="glw-cap-card-value">{rizoDatos.plasticidad_valor || rizoDatos.plasticidad || '—'}</div></div>
+          <div className="glw-cap-card"><div className="glw-cap-card-label">Textura</div><div className="glw-cap-card-value">{rizoDatos.textura_valor || rizoDatos.textura || '—'}</div></div>
+          <div className="glw-cap-card"><div className="glw-cap-card-label">Grosor</div><div className="glw-cap-card-value">{rizoDatos.grosor_valor || rizoDatos.grosor || '—'}</div></div>
+          <div className="glw-cap-card"><div className="glw-cap-card-label">Oleosidad</div><div className="glw-cap-card-value">{rizoDatos.oleosidad_valor || rizoDatos.oleosidad || '—'}</div></div>
+          <div className="glw-cap-card"><div className="glw-cap-card-label">Densidad</div><div className="glw-cap-card-value">{rizoDatos.densidad_valor || rizoDatos.densidad || '—'}</div></div>
           <div className="glw-cap-card" style={{ gridColumn: '1 / -1' }}><div className="glw-cap-card-label">Tipo de Textura</div><div className="glw-cap-card-value">{rizoDatos.tipo_textura || '—'}</div></div>
         </div>
       ) : <div className="glw-empty-state">Sin datos de rizotipo</div>}
@@ -212,7 +216,8 @@ function PerfilCapilarTab({ client }: { client: Cliente }) {
             <tbody>
               {fichasMostradas.map((ficha: any) => {
                 const fichaKey = ficha._id || ficha.id
-                const tieneCitaId = !!getCitaId(ficha)
+                const descargaId = getDescargaId(ficha)
+                const tieneCitaId = !!descargaId
                 return (
                   <tr key={fichaKey}>
                     <td>{fmtDate(ficha.fecha_ficha)}</td>

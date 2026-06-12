@@ -21,26 +21,14 @@ import {
   resolveCurrencyLocale,
 } from "../../../lib/currency";
 import { facturaService } from "../Sales-invoiced/facturas";
-import { CASH_PAYMENT_METHOD_OPTIONS } from "../CierreCaja/constants";
-import { cashService } from "../CierreCaja/api/cashService";
-import {
-  getResumenFinanciero,
-  crearEgresoMayor,
-  crearIngresoMayor,
-  crearEgresoMenor,
-  crearTraslado,
-  normalizeCategoria,
-  normalizeMetodoPago,
-  type ResumenFinanciero,
-} from "./finanzasMovimientosApi";
 import {
   getClientesAnalytics,
   getClientesNuevos,
   type ClientesAnalyticsResponse,
   type ClientesNuevosResponse,
 } from "./clientesAnalyticsApi";
-import { RefreshCw } from "lucide-react";
-import { DatePicker } from "../../../components/ui/DatePicker";
+import { RefreshCw, Users, XCircle, Clock, CalendarX, Download, Search } from "lucide-react";
+import { getCitas } from "../../../components/Quotes/citasApi";
 
 interface DateRange {
   start_date: string;
@@ -268,99 +256,15 @@ export function DashboardSedeView({
   const [extendedMetrics, setExtendedMetrics] = useState<ExtendedMetrics | null>(null);
   const [analyticsKPIs, setAnalyticsKPIs] = useState<DashboardResponse | null>(null);
   const [churnData, setChurnData] = useState<ChurnCliente[]>([]);
-  const [resumenFinanciero, setResumenFinanciero] = useState<ResumenFinanciero | null>(null);
-  const egresoMayorCat = (cat: string): number =>
-  resumenFinanciero?.pl?.egresos_mayor_por_categoria?.[cat] ?? 0;
-  const [loadingResumen, setLoadingResumen] = useState(false);
   const [clientAnalytics, setClientAnalytics] = useState<ClientesAnalyticsResponse | null>(null);
   const [clientesNuevos, setClientesNuevos] = useState<ClientesNuevosResponse | null>(null);
-
-  const [financialTab, setFinancialTab] = useState<"ventas" | "pl" | "cajas" | "traslados" | "registrar" | "cierre">("ventas");
-  const [registrarSubTab, setRegistrarSubTab] = useState<"egreso-mayor" | "ingreso-mayor" | "traslado" | "egreso-menor" | "devolucion" | "propina" | "nomina">("egreso-mayor");
-  const [transferDir, setTransferDir] = useState<"menor-mayor" | "mayor-menor">("menor-mayor");
-  const [registrarLoading, setRegistrarLoading] = useState(false);
-  const [registrarError, setRegistrarError] = useState<string | null>(null);
-  const [registrarSuccess, setRegistrarSuccess] = useState<string | null>(null);
-
-  // ── Cierre de caja state ──
-  const [cierreContado, setCierreContado] = useState("");
-  const [cierreObservaciones, setCierreObservaciones] = useState("");
-  const [cierreLoading, setCierreLoading] = useState(false);
-  const [cierreError, setCierreError] = useState<string | null>(null);
-  const [cierreSuccess, setCierreSuccess] = useState<string | null>(null);
-  const [cierreHoy, setCierreHoy] = useState<any | null>(null);
-  const [cierresHistorial, setCierresHistorial] = useState<any[]>([]);
-  const [loadingCierres, setLoadingCierres] = useState(false);
-
-  type MovimientoManual = {
-    id: string; fecha: string; caja: string; tipo: string;
-    concepto: string; categoria: string; monto: number; esEgreso: boolean;
-  };
-
-  const lsMovKey = (sid: string) => `finanzas_movimientos_${sid}`;
-
-  const readMovimientosLS = (sid: string): MovimientoManual[] => {
-    try {
-      const raw = localStorage.getItem(lsMovKey(sid));
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch { return []; }
-  };
-
-  // Sede efectiva para el formulario "Registrar" — cuando sedeId es "global"
-  // el usuario elige la sede dentro del formulario mismo.
-  const [registrarSedeId, setRegistrarSedeId] = useState<string>(
-    sedeId !== "global" ? sedeId : ""
-  );
-
-  const [movimientosManuales, setMovimientosManuales] = useState<MovimientoManual[]>(
-    () => sedeId !== "global" ? readMovimientosLS(sedeId) : []
-  );
-
-  // Sincroniza registrarSedeId cuando cambia la sede del header
-  useEffect(() => {
-    if (sedeId !== "global") {
-      setRegistrarSedeId(sedeId);
-    } else {
-      // En modo global: si aún no hay sede seleccionada, pre-seleccionar la primera disponible
-      setRegistrarSedeId((prev) => prev || (sedes.length > 0 ? sedes[0].sede_id : ""));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sedeId, sedes]);
-
-  // Recarga la lista desde localStorage cuando cambia la sede efectiva del formulario
-  useEffect(() => {
-    if (registrarSedeId) setMovimientosManuales(readMovimientosLS(registrarSedeId));
-    else setMovimientosManuales([]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registrarSedeId]);
-
-  // Persiste la lista en localStorage cada vez que se modifica
-  useEffect(() => {
-    if (!registrarSedeId) return;
-    try {
-      localStorage.setItem(lsMovKey(registrarSedeId), JSON.stringify(movimientosManuales));
-    } catch { /* quota exceeded – ignorar */ }
-  }, [movimientosManuales, registrarSedeId]);
-
-  const resolveToday = () => toLocalYMD(new Date());
-
-  const [egresoMayorForm, setEgresoMayorForm] = useState({
-    concepto: "", monto: "", categoria: "", metodo: CASH_PAYMENT_METHOD_OPTIONS[0].value,
-    fecha: resolveToday(), referencia: "", observaciones: "",
-  });
-  const [ingresoMayorForm, setIngresoMayorForm] = useState({
-    concepto: "", monto: "", tipo: "", metodo: CASH_PAYMENT_METHOD_OPTIONS[0].value,
-    fecha: resolveToday(), referencia: "", observaciones: "",
-  });
-  const [trasladoForm, setTrasladoForm] = useState({
-    monto: "", fecha: resolveToday(), concepto: "", observaciones: "",
-  });
-  const [egresoMenorForm, setEgresoMenorForm] = useState({
-    concepto: "", monto: "", categoria: "Gasto operativo",
-    fecha: resolveToday(), observaciones: "",
-  });
+  const [citasResumen, setCitasResumen] = useState<{ asistidas: number; canceladas: number; precitas: number; total: number } | null>(null);
+  const [citasDetalle, setCitasDetalle] = useState<any[]>([]);
+  const [citasSearch, setCitasSearch] = useState("");
+  const [citasFilterEstado, setCitasFilterEstado] = useState("");
+  const [citasFilterEstilista, setCitasFilterEstilista] = useState("");
+  const [citasPage, setCitasPage] = useState(1);
+  const CITAS_PER_PAGE = 10;
 
   const resolveMetricasByCurrency = useCallback(
     (metricasPorMoneda?: VentasDashboardResponse["metricas_por_moneda"]) => {
@@ -493,85 +397,6 @@ export function DashboardSedeView({
     }
   }, [token, sedeId]);
 
-  const loadResumenFinanciero = useCallback(async () => {
-    if (!token || !sedeId || sedeId === "global") return;
-    setLoadingResumen(true);
-    try {
-      const range = buildInvoiceRange();
-      const data = await getResumenFinanciero(token, {
-        sede_id: sedeId,
-        fecha_inicio: range.start_date,
-        fecha_fin: range.end_date,
-      });
-      setResumenFinanciero(data);
-    } catch {
-      // Silencioso: el dashboard muestra "–" si no hay datos
-      setResumenFinanciero(null);
-    } finally {
-      setLoadingResumen(false);
-    }
-  }, [token, sedeId, buildInvoiceRange]);
-
-  useEffect(() => {
-    loadResumenFinanciero();
-  }, [loadResumenFinanciero]);
-
-  // ── Cierre de caja: load & submit ──
-  const loadCierres = useCallback(async () => {
-    if (!sedeId || sedeId === "global") return;
-    setLoadingCierres(true);
-    try {
-      const today = resolveToday();
-      const range = buildInvoiceRange();
-      const data = await cashService.getCierres({
-        sede_id: sedeId,
-        fecha_inicio: range.start_date,
-        fecha_fin: range.end_date,
-      });
-      const list = Array.isArray(data) ? data : data?.cierres ?? [];
-      setCierresHistorial(list);
-      const todayCierre = list.find((c: any) => c.fecha === today || c.fecha?.startsWith(today));
-      setCierreHoy(todayCierre ?? null);
-    } catch {
-      setCierresHistorial([]);
-      setCierreHoy(null);
-    } finally {
-      setLoadingCierres(false);
-    }
-  }, [sedeId, buildInvoiceRange]);
-
-  useEffect(() => {
-    if (financialTab === "cierre" || financialTab === "cajas") loadCierres();
-  }, [financialTab, loadCierres]);
-
-  const handleGuardarCierre = async () => {
-    const contado = parseFloat(cierreContado.replace(/[^0-9.-]/g, ""));
-    if (isNaN(contado) || contado < 0) {
-      setCierreError("Ingresa el monto contado físicamente");
-      return;
-    }
-    setCierreLoading(true);
-    setCierreError(null);
-    setCierreSuccess(null);
-    try {
-      await cashService.cierreCaja({
-        sede_id: sedeId,
-        fecha: resolveToday(),
-        efectivo_contado: contado,
-        observaciones: cierreObservaciones || undefined,
-      });
-      setCierreSuccess("Cierre de caja guardado correctamente");
-      setCierreContado("");
-      setCierreObservaciones("");
-      loadCierres();
-      setTimeout(() => setCierreSuccess(null), 5000);
-    } catch (err: any) {
-      setCierreError(err?.message || "No se pudo guardar el cierre de caja");
-    } finally {
-      setCierreLoading(false);
-    }
-  };
-
   const loadClientAnalytics = useCallback(async () => {
     if (!token) return;
     const effectiveSedeId = sedeId === "global" ? undefined : sedeId;
@@ -591,6 +416,68 @@ export function DashboardSedeView({
   useEffect(() => {
     loadClientAnalytics();
   }, [loadClientAnalytics]);
+
+  const resolveEstado = (estado: string): string => {
+    const v = (estado || "").toLowerCase().trim();
+    if (v.includes("cancel")) return "cancelada";
+    if (["pre-cita", "pre_cita", "precita", "pre_reservada"].some((s) => v.includes(s))) return "precita";
+    if (v.includes("asistida") || v.includes("completada") || v.includes("finaliz") || v.includes("facturada")) return "asistida";
+    if (v.includes("confirm")) return "confirmada";
+    if (v.includes("no_asistio") || v.includes("no asistio")) return "cancelada";
+    return v;
+  };
+
+  const loadCitasResumen = useCallback(async () => {
+    if (!token) return;
+    try {
+      const range = buildInvoiceRange();
+      const start = new Date(range.start_date);
+      const end = new Date(range.end_date);
+      const days: string[] = [];
+      for (let d = new Date(start); d <= end && days.length <= 31; d.setDate(d.getDate() + 1)) {
+        days.push(toLocalYMD(d));
+      }
+      if (days.length > 31) {
+        setCitasResumen(null);
+        return;
+      }
+      const effectiveSedeId = sedeId === "global" ? undefined : sedeId;
+      const allCitas: any[] = [];
+
+      const batchSize = 7;
+      for (let i = 0; i < days.length; i += batchSize) {
+        const batch = days.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map(async (fecha) => {
+            try {
+              const res = await getCitas({ sede_id: effectiveSedeId, fecha }, token);
+              const arr = Array.isArray((res as any)?.citas) ? (res as any).citas : Array.isArray(res) ? res : [];
+              return arr;
+            } catch { return []; }
+          })
+        );
+        results.forEach((r) => allCitas.push(...r));
+      }
+
+      let asistidas = 0, canceladas = 0, precitas = 0;
+      allCitas.forEach((c: any) => {
+        const est = resolveEstado(c.estado || "");
+        if (est === "asistida") asistidas++;
+        else if (est === "cancelada") canceladas++;
+        else if (est === "precita") precitas++;
+      });
+      setCitasResumen({ asistidas, canceladas, precitas, total: allCitas.length });
+      setCitasDetalle(allCitas);
+      setCitasPage(1);
+    } catch {
+      setCitasResumen(null);
+      setCitasDetalle([]);
+    }
+  }, [token, sedeId, buildInvoiceRange]);
+
+  useEffect(() => {
+    loadCitasResumen();
+  }, [loadCitasResumen]);
 
   const loadData = useCallback(async () => {
     if (!token || !sedeId) return;
@@ -677,195 +564,87 @@ export function DashboardSedeView({
     loadData();
   }, [loadData]);
 
-  const handleEgresoMayor = async () => {
-    const concepto = egresoMayorForm.concepto.trim();
-    const monto = parseFloat(egresoMayorForm.monto.replace(/[̀-ͯ]/g, ""));
-    if (!concepto) { setRegistrarError("El concepto es requerido"); return; }
-    if (!monto || monto <= 0) { setRegistrarError("El monto debe ser mayor a 0"); return; }
-    if (!egresoMayorForm.categoria) { setRegistrarError("La categoría es requerida"); return; }
-    setRegistrarLoading(true); setRegistrarError(null); setRegistrarSuccess(null);
-    try {
-      const fecha = egresoMayorForm.fecha || resolveToday();
-      await crearEgresoMayor(token, {
-        sede_id: registrarSedeId || sedeId,
-        fecha,
-        concepto,
-        monto,
-        categoria: normalizeCategoria("egreso-mayor", egresoMayorForm.categoria),
-        metodo_pago: normalizeMetodoPago(egresoMayorForm.metodo),
-        referencia_factura: egresoMayorForm.referencia || undefined,
-        observaciones: egresoMayorForm.observaciones || undefined,
-      });
-      setMovimientosManuales((prev) => [{
-        id: `em-${Date.now()}`, fecha, caja: "Caja Mayor", tipo: "Egreso",
-        concepto, categoria: egresoMayorForm.categoria || "Sin categoría", monto, esEgreso: true,
-      }, ...prev].slice(0, 10));
-      setEgresoMayorForm({ concepto: "", monto: "", categoria: "", metodo: CASH_PAYMENT_METHOD_OPTIONS[0].value, fecha: resolveToday(), referencia: "", observaciones: "" });
-      setRegistrarSuccess("Egreso de Caja Mayor registrado correctamente");
-      setTimeout(() => setRegistrarSuccess(null), 3000);
-      loadResumenFinanciero();
-    } catch (err: any) {
-      setRegistrarError(err?.message || "No se pudo registrar el egreso");
-    } finally { setRegistrarLoading(false); }
-  };
+  // ── Mini-components (v2 design) ──────────────────────────
 
-  const handleIngresoMayor = async () => {
-    const concepto = ingresoMayorForm.concepto.trim();
-    const monto = parseFloat(ingresoMayorForm.monto.replace(/[̀-ͯ]/g, ""));
-    if (!concepto) { setRegistrarError("El concepto es requerido"); return; }
-    if (!monto || monto <= 0) { setRegistrarError("El monto debe ser mayor a 0"); return; }
-    if (!ingresoMayorForm.tipo) { setRegistrarError("El tipo de ingreso es requerido"); return; }
-    setRegistrarLoading(true); setRegistrarError(null); setRegistrarSuccess(null);
-    try {
-      const fecha = ingresoMayorForm.fecha || resolveToday();
-      await crearIngresoMayor(token, {
-        sede_id: registrarSedeId || sedeId,
-        fecha,
-        concepto,
-        monto,
-        categoria: normalizeCategoria("ingreso-mayor", ingresoMayorForm.tipo),
-        metodo_pago: normalizeMetodoPago(ingresoMayorForm.metodo),
-        referencia_factura: ingresoMayorForm.referencia || undefined,
-        observaciones: ingresoMayorForm.observaciones || undefined,
-      });
-      setMovimientosManuales((prev) => [{
-        id: `im-${Date.now()}`, fecha, caja: "Caja Mayor", tipo: "Ingreso",
-        concepto, categoria: ingresoMayorForm.tipo || "Sin tipo", monto, esEgreso: false,
-      }, ...prev].slice(0, 10));
-      setIngresoMayorForm({ concepto: "", monto: "", tipo: "", metodo: CASH_PAYMENT_METHOD_OPTIONS[0].value, fecha: resolveToday(), referencia: "", observaciones: "" });
-      setRegistrarSuccess("Ingreso de Caja Mayor registrado correctamente");
-      setTimeout(() => setRegistrarSuccess(null), 3000);
-      loadResumenFinanciero();
-    } catch (err: any) {
-      setRegistrarError(err?.message || "No se pudo registrar el ingreso");
-    } finally { setRegistrarLoading(false); }
-  };
-
-  const handleTraslado = async () => {
-    const monto = parseFloat(trasladoForm.monto.replace(/[̀-ͯ]/g, ""));
-    const concepto = trasladoForm.concepto.trim() || (transferDir === "menor-mayor" ? "Traslado Caja Menor a Caja Mayor" : "Traslado Caja Mayor a Caja Menor");
-    if (!monto || monto <= 0) { setRegistrarError("El monto debe ser mayor a 0"); return; }
-    setRegistrarLoading(true); setRegistrarError(null); setRegistrarSuccess(null);
-    try {
-      const fecha = trasladoForm.fecha || resolveToday();
-      const [cajaOrigen, cajaDestino] = transferDir === "menor-mayor"
-        ? (["caja_menor", "caja_mayor"] as const)
-        : (["caja_mayor", "caja_menor"] as const);
-      await crearTraslado(token, {
-        sede_id: registrarSedeId || sedeId,
-        fecha,
-        concepto,
-        monto,
-        caja_origen: cajaOrigen,
-        caja_destino: cajaDestino,
-        observaciones: trasladoForm.observaciones || undefined,
-      });
-      setMovimientosManuales((prev) => [{
-        id: `tr-${Date.now()}`, fecha,
-        caja: `${cajaOrigen === "caja_menor" ? "Caja Menor" : "Caja Mayor"} → ${cajaDestino === "caja_mayor" ? "Caja Mayor" : "Caja Menor"}`,
-        tipo: "Traslado", concepto, categoria: "Traslado entre cajas", monto, esEgreso: false,
-      }, ...prev].slice(0, 10));
-      setTrasladoForm({ monto: "", fecha: resolveToday(), concepto: "", observaciones: "" });
-      setRegistrarSuccess("Traslado registrado correctamente");
-      setTimeout(() => setRegistrarSuccess(null), 3000);
-      loadResumenFinanciero();
-    } catch (err: any) {
-      setRegistrarError(err?.message || "No se pudo registrar el traslado");
-    } finally { setRegistrarLoading(false); }
-  };
-
-  const handleEgresoMenor = async () => {
-    const concepto = egresoMenorForm.concepto.trim();
-    const monto = parseFloat(egresoMenorForm.monto.replace(/[̀-ͯ]/g, ""));
-    if (!concepto) { setRegistrarError("El concepto es requerido"); return; }
-    if (!monto || monto <= 0) { setRegistrarError("El monto debe ser mayor a 0"); return; }
-    setRegistrarLoading(true); setRegistrarError(null); setRegistrarSuccess(null);
-    try {
-      const fecha = egresoMenorForm.fecha || resolveToday();
-      await crearEgresoMenor(token, {
-        sede_id: registrarSedeId || sedeId,
-        fecha,
-        concepto,
-        monto,
-        categoria: normalizeCategoria("egreso-menor", egresoMenorForm.categoria),
-        metodo_pago: "efectivo",
-        observaciones: egresoMenorForm.observaciones || undefined,
-      });
-      setMovimientosManuales((prev) => [{
-        id: `emen-${Date.now()}`, fecha, caja: "Caja Menor", tipo: "Egreso",
-        concepto, categoria: egresoMenorForm.categoria || "Gasto operativo", monto, esEgreso: true,
-      }, ...prev].slice(0, 10));
-      setEgresoMenorForm({ concepto: "", monto: "", categoria: "Gasto operativo", fecha: resolveToday(), observaciones: "" });
-      setRegistrarSuccess("Egreso de Caja Menor registrado correctamente");
-      setTimeout(() => setRegistrarSuccess(null), 3000);
-      loadResumenFinanciero();
-    } catch (err: any) {
-      setRegistrarError(err?.message || "No se pudo registrar el egreso");
-    } finally { setRegistrarLoading(false); }
-  };
-
-  // ── Mini-components ──────────────────────────────────────
-
-  const SectionTitle = ({ children, note }: { children: React.ReactNode; note?: string }) => (
-    <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.6px] text-slate-400 mt-[22px] mb-2.5">
-      <span>{children}</span>
-      {note && (
-        <span className="text-[10px] font-normal normal-case tracking-normal text-slate-400 italic ml-2">{note}</span>
-      )}
-      <div className="flex-1 h-px bg-slate-200" />
+  const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-[#9b9b97] mb-3.5 mt-8 first:mt-0">
+      {children}
     </div>
   );
 
-  const KPICard = ({ label, value, sub, change, featured, valueClassName }: {
-    label: string; value: string; sub?: string; change?: string; featured?: boolean; valueClassName?: string;
+  const KPICard = ({ label, value, sub, change, featured, valueClassName, smallValue }: {
+    label: string; value: string; sub?: string; change?: string; featured?: boolean; valueClassName?: string; smallValue?: boolean;
   }) => (
-    <div className={`bg-white rounded-[10px] px-4 py-3.5 ${featured ? "border-2 border-slate-800" : "border border-slate-200"}`}>
-      <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-[0.4px] mb-1.5">{label}</div>
-      <div className={`text-[22px] font-bold tracking-tight ${valueClassName || "text-slate-800"}`}>{value}</div>
+    <div className={`bg-white rounded-lg px-5 py-[18px] transition-shadow hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)] ${featured ? "border border-[#0a0a0a]" : "border border-[#e8e8e6]"}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.4px] text-[#9b9b97] mb-2.5">{label}</div>
+      <div className={`${smallValue ? "text-[13px] tracking-[-0.2px] mt-1" : "text-[26px] tracking-[-1px]"} font-bold ${valueClassName || "text-[#0a0a0a]"}`}>{value}</div>
       {change && change !== "0%" && (
-        <div className="text-[10px] font-semibold mt-0.5 text-slate-800">↑ {change} vs mes anterior</div>
+        <div className="text-[11.5px] mt-1 text-[#9b9b97]"><span className="text-[#16a34a] font-medium">↑ {change}</span> vs mes anterior</div>
       )}
-      {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[11.5px] text-[#9b9b97] mt-1">{sub}</div>}
     </div>
   );
 
-  const ClientMetric = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
-    <div className="p-3 border border-slate-200 rounded-lg text-center bg-white">
-      <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-[0.3px] mb-1">{label}</div>
-      <div className="text-[22px] font-bold text-slate-800">{value}</div>
-      {sub && <div className="text-[9px] text-slate-400 mt-0.5">{sub}</div>}
+  const ClientMetric = ({ label, value, sub, smallValue }: { label: string; value: string; sub?: string; smallValue?: boolean }) => (
+    <div className="bg-white rounded-lg px-5 py-[18px] border border-[#e8e8e6] transition-shadow hover:shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.4px] text-[#9b9b97] mb-2.5">{label}</div>
+      <div className={`${smallValue ? "text-[18px] tracking-[-0.5px]" : "text-[26px] tracking-[-1px]"} font-bold text-[#0a0a0a]`}>{value}</div>
+      {sub && <div className="text-[11.5px] text-[#9b9b97] mt-1">{sub}</div>}
+    </div>
+  );
+
+  const ProgressRow = ({ label, value, sub, barPct, barColor }: {
+    label: React.ReactNode; value: React.ReactNode; sub?: string; barPct?: number; barColor?: string;
+  }) => (
+    <div className="flex flex-col gap-1.5 py-3.5 border-b border-[#e8e8e6] last:border-b-0">
+      <div className="flex justify-between items-center text-[12.5px]">
+        <span className="text-[#6b6b68]">{label}</span>
+        <div className="text-right">
+          <span className="font-semibold text-[12px] text-[#0a0a0a] font-sans">{value}</span>
+          {sub && <span className="text-[11px] text-[#9b9b97] ml-1.5">{sub}</span>}
+        </div>
+      </div>
+      {barPct !== undefined && (
+        <div className="h-1 bg-[#f7f7f6] rounded-sm overflow-hidden">
+          <div className="h-full rounded-sm transition-[width] duration-400" style={{ width: `${Math.max(2, barPct)}%`, background: barColor || "#0a0a0a" }} />
+        </div>
+      )}
     </div>
   );
 
   const RowItem = ({ name, value, sub, barPct }: {
     name: React.ReactNode; value: React.ReactNode; sub?: string; barPct?: number;
   }) => (
-    <div className="flex justify-between items-center py-2 text-xs border-b border-slate-100 last:border-b-0">
-      <span className="font-medium text-slate-700 flex-shrink-0 flex items-center">{name}</span>
+    <div className="flex justify-between items-center py-2.5 border-b border-[#e8e8e6] last:border-b-0">
+      <span className="font-medium text-[12.5px] text-[#6b6b68] flex-shrink-0 flex items-center">{name}</span>
       {barPct !== undefined && (
-        <div className="flex-1 mx-3 h-1 bg-slate-100 rounded min-w-[40px]">
-          <div className="h-full bg-slate-800 rounded" style={{ width: `${Math.max(2, barPct)}%` }} />
+        <div className="flex-1 mx-3 h-1 bg-[#f7f7f6] rounded-sm min-w-[40px] overflow-hidden">
+          <div className="h-full bg-[#0a0a0a] rounded-sm" style={{ width: `${Math.max(2, barPct)}%` }} />
         </div>
       )}
       <div className="text-right">
-        <span className="font-bold text-[13px] text-slate-800">{value}</span>
-        {sub && <div className="text-[10px] text-slate-400 leading-none mt-0.5">{sub}</div>}
+        <span className="font-semibold text-[13px] text-[#0a0a0a]">{value}</span>
+        {sub && <div className="text-[11px] text-[#9b9b97] leading-none mt-0.5">{sub}</div>}
       </div>
     </div>
   );
 
-  const Card = ({ title, titleSub, children, scrollable, action }: {
-    title: string; titleSub?: string; children: React.ReactNode; scrollable?: boolean; action?: React.ReactNode;
+  const Card = ({ title, titleSub, children, scrollable, action, noPadBody }: {
+    title: string; titleSub?: string; children: React.ReactNode; scrollable?: boolean; action?: React.ReactNode; noPadBody?: boolean;
   }) => (
-    <div className="bg-white border border-slate-200 rounded-[10px] p-[18px] h-full flex flex-col">
-      <div className="text-[13px] font-bold mb-3 flex justify-between items-center text-slate-800 flex-shrink-0">
-        <span>{title}</span>
+    <div className="bg-white border border-[#e8e8e6] rounded-lg h-full flex flex-col overflow-hidden">
+      <div className="flex justify-between items-center px-5 py-4 border-b border-[#e8e8e6] flex-shrink-0">
+        <div>
+          <div className="text-[13.5px] font-semibold text-[#0a0a0a]">{title}</div>
+        </div>
         <div className="flex items-center gap-2">
-          {titleSub && <span className="text-[10px] text-slate-400 font-medium">{titleSub}</span>}
+          {titleSub && <span className="text-[11px] text-[#9b9b97] font-normal">{titleSub}</span>}
           {action}
         </div>
       </div>
-      {scrollable ? <div className="flex-1 overflow-y-auto min-h-0">{children}</div> : children}
+      {scrollable
+        ? <div className={`flex-1 overflow-y-auto min-h-0 ${noPadBody ? "" : "px-5 py-4"}`}>{children}</div>
+        : <div className={noPadBody ? "" : "px-5 py-4"}>{children}</div>}
     </div>
   );
 
@@ -875,17 +654,7 @@ export function DashboardSedeView({
   const pctProductos = metricas.ventas_totales > 0 ? Math.round((metricas.ventas_productos / metricas.ventas_totales) * 100) : 0;
   const dias = dashboardData?.range?.dias || 1;
   const ventaPromDia = metricas.ventas_totales > 0 ? Math.round(metricas.ventas_totales / dias) : 0;
-  const saldoCajaMenorReal =
-  (metricas.metodos_pago?.efectivo ?? 0)
-  + (resumenFinanciero?.traslados.mayor_a_menor ?? 0)
-  - (resumenFinanciero?.pl.egresos_menor_total ?? 0)
-  - (resumenFinanciero?.traslados.menor_a_mayor ?? 0);
-
-  const saldoConsolidadoReal =
-  saldoCajaMenorReal + (resumenFinanciero?.cajas.caja_mayor ?? 0);
-
-  const totalServicios = extendedMetrics?.topServicios.reduce((s, i) => s + i.cantidad, 0) || 0;
-  const totalProductosVendidos = extendedMetrics?.topProductos.reduce((s, i) => s + i.cantidad, 0) || 0;
+  const topServicioNombre = extendedMetrics?.topServicios?.[0]?.nombre ?? null;
 
   const paymentRows = [
     { name: "Transferencia", value: metricas.metodos_pago?.transferencia || 0 },
@@ -894,7 +663,7 @@ export function DashboardSedeView({
     { name: "Efectivo", value: metricas.metodos_pago?.efectivo || 0 },
     { name: "Tarjeta", value: metricas.metodos_pago?.tarjeta || 0 },
     { name: "Addi", value: metricas.metodos_pago?.addi || 0 },
-    { name: "Link de Pago",       value: metricas.metodos_pago?.link_de_pago     || 0 },
+    { name: "Link de Pago", value: metricas.metodos_pago?.link_de_pago || 0 },
     { name: "Sin Pago", value: metricas.metodos_pago?.sin_pago || 0 },
     { name: "Otros", value: metricas.metodos_pago?.otros || 0 },
   ].filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
@@ -913,16 +682,19 @@ export function DashboardSedeView({
   const churnEnRiesgo = estadoBase ? estadoBase.en_riesgo : churnData.filter((c) => c.dias_inactivo >= 121 && c.dias_inactivo <= 180).length;
   const churnPerdidos = estadoBase ? estadoBase.perdidos : churnData.filter((c) => c.dias_inactivo > 180).length;
 
-  const isSpecificSede = sedeId !== "global";
-
   // ── Render ───────────────────────────────────────────────
+
+  // ── Donut SVG helper ──────────────────────────────────────
+  const donutRadius = 30;
+  const donutCircumference = 2 * Math.PI * donutRadius;
+  const donutStroke = (pct: number) => (donutCircumference * pct) / 100;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-500 text-sm">Cargando datos…</p>
+          <div className="w-10 h-10 border-4 border-[#e8e8e6] border-t-[#0a0a0a] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-[#6b6b68] text-sm">Cargando datos…</p>
         </div>
       </div>
     );
@@ -930,13 +702,13 @@ export function DashboardSedeView({
 
   if (error) {
     return (
-      <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-        <p className="text-slate-500 mb-4">{error}</p>
+      <div className="text-center py-12 bg-white rounded-lg border border-[#e8e8e6]">
+        <p className="text-[#6b6b68] mb-4">{error}</p>
         <button
           onClick={loadData}
-          className="flex items-center gap-2 mx-auto px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50"
+          className="inline-flex items-center gap-1.5 px-3.5 py-[7px] border border-[#e8e8e6] rounded-[5px] text-[12.5px] font-medium text-[#6b6b68] bg-white hover:bg-[#f7f7f6] hover:text-[#0a0a0a] transition-all"
         >
-          <RefreshCw className="w-4 h-4" /> Reintentar
+          <RefreshCw className="w-[13px] h-[13px]" /> Reintentar
         </button>
       </div>
     );
@@ -944,874 +716,219 @@ export function DashboardSedeView({
 
   return (
     <>
-      {/* ══ ESTADO FINANCIERO DE LA OPERACIÓN ═══════════════ */}
-      <SectionTitle note="→ Contabilidad real, NO flujo de caja">
-        Estado financiero de la operación
-      </SectionTitle>
+      {/* ══ VENTAS ═══════════════════════════════════════════ */}
+      <SectionTitle>Ventas</SectionTitle>
 
-      <div className="flex gap-0 mb-4 border-b border-slate-200 items-center">
-            <button
-              onClick={() => setFinancialTab("ventas")}
-              className={`px-4 py-2.5 text-[13.5px] font-medium border-b-2 transition-colors ${
-                financialTab === "ventas"
-                  ? "text-slate-800 font-semibold border-slate-800"
-                  : "text-slate-500 border-transparent hover:text-slate-700"
-              }`}
-            >
-              Ventas
-            </button>
-            <span className="text-[10px] font-bold uppercase tracking-[0.6px] text-slate-400 px-3 mx-1 border-r border-slate-200 self-center">Estado Financiero</span>
-            {([
-              { id: "pl" as const, label: "Estado de Resultados" },
-              { id: "cajas" as const, label: "Cajas" },
-              { id: "traslados" as const, label: "Traslados" },
-              { id: "registrar" as const, label: "Registrar movimientos" },
-              { id: "cierre" as const, label: "Cierre de caja" },
-            ]).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setFinancialTab(tab.id)}
-                className={`px-4 py-2.5 text-[13.5px] font-medium border-b-2 transition-colors ${
-                  financialTab === tab.id
-                    ? "text-slate-800 font-semibold border-slate-800"
-                    : "text-slate-500 border-transparent hover:text-slate-700"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-            <span className="ml-auto text-[11px] text-slate-400 italic">→ Contabilidad real, NO flujo de caja</span>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+        <KPICard featured label="Ventas totales" value={formatCurrency(metricas.ventas_totales)} change={metricas.crecimiento_ventas !== "0%" ? metricas.crecimiento_ventas : undefined} />
+        <KPICard label="Servicios" value={formatCurrency(metricas.ventas_servicios)} sub={`${extendedMetrics?.topServicios.reduce((s, i) => s + i.cantidad, 0) || 0} servicios · ${pctServicios}%`} />
+        <KPICard label="Productos" value={formatCurrency(metricas.ventas_productos)} sub={`${extendedMetrics?.topProductos.reduce((s, i) => s + i.cantidad, 0) || 0} ventas · ${pctProductos}%`} />
+        <KPICard label="Transacciones" value={String(metricas.cantidad_ventas || 0)} sub={`Ticket prom: ${formatCurrency(metricas.ticket_promedio)}`} />
+        <KPICard label="Venta promedio/día" value={formatCurrency(ventaPromDia)} sub={`${dias} días del período`} />
+        <KPICard label="Top servicio" value={topServicioNombre ?? "—"} sub="por ingreso" smallValue />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <Card title="Ventas cobradas por método de pago" titleSub="solo dinero recibido">
+          {paymentRows.length > 0 ? (
+            <>
+              {paymentRows.map((row) => (
+                <ProgressRow
+                  key={row.name}
+                  label={row.name}
+                  value={formatCurrency(row.value)}
+                  sub={`${Math.round((row.value / (totalPayments || 1)) * 100)}%`}
+                  barPct={totalPayments > 0 ? (row.value / totalPayments) * 100 : 0}
+                />
+              ))}
+              <div className="flex justify-between pt-3 text-[13px] font-semibold border-t border-[#e8e8e6] mt-1">
+                <span className="text-[#6b6b68]">Total cobrado</span>
+                <span className="text-[#0a0a0a] font-sans">{formatCurrency(totalPayments)}</span>
+              </div>
+            </>
+          ) : (
+            <p className="text-[12.5px] text-[#9b9b97] py-8 text-center">Sin datos de pagos para este período</p>
+          )}
+        </Card>
+
+        <Card title="Top servicios por ingreso" titleSub={getPeriodDisplay()} scrollable>
+          {extendedMetrics && extendedMetrics.topServicios.length > 0 ? (
+            extendedMetrics.topServicios.map((s) => (
+              <RowItem key={s.nombre} name={s.nombre} value={formatCurrency(s.total)} sub={`${s.cantidad} servicios`} />
+            ))
+          ) : (
+            <p className="text-[12.5px] text-[#9b9b97] py-8 text-center">Sin datos de servicios para este período</p>
+          )}
+        </Card>
+      </div>
+
+      {/* ══ RESUMEN DE CITAS ═══════════════════════════════ */}
+      {citasResumen && (
+        <>
+          <SectionTitle>Resumen de citas</SectionTitle>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+            {/* Asistidas */}
+            <div className="bg-white border border-[#e8e8e6] rounded-lg px-5 py-5 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-[5px] bg-[#f7f7f6] text-[#0a0a0a] flex items-center justify-center flex-shrink-0">
+                  <Users className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[12px] font-semibold uppercase tracking-[0.3px] text-[#6b6b68]">Asistidas</span>
+              </div>
+              <div className="text-[32px] font-semibold tracking-[-1.5px] text-[#0a0a0a] font-sans leading-none">{citasResumen.asistidas}</div>
+              <div className="text-[11.5px] text-[#9b9b97]">{citasResumen.total > 0 ? `${Math.round((citasResumen.asistidas / citasResumen.total) * 100)}% del total` : "0% del total"}</div>
+            </div>
+            {/* Canceladas */}
+            <div className="bg-white border border-[#e8e8e6] rounded-lg px-5 py-5 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-[5px] bg-[#f7f7f6] text-[#0a0a0a] flex items-center justify-center flex-shrink-0">
+                  <XCircle className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[12px] font-semibold uppercase tracking-[0.3px] text-[#6b6b68]">Canceladas</span>
+              </div>
+              <div className="text-[32px] font-semibold tracking-[-1.5px] text-[#0a0a0a] font-sans leading-none">{citasResumen.canceladas}</div>
+              <div className="text-[11.5px] text-[#9b9b97]">{citasResumen.total > 0 ? `${Math.round((citasResumen.canceladas / citasResumen.total) * 100)}% de cancelación` : "0% de cancelación"}</div>
+            </div>
+            {/* Precitas */}
+            <div className="bg-white border border-[#e8e8e6] rounded-lg px-5 py-5 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-[5px] bg-[#f7f7f6] text-[#0a0a0a] flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[12px] font-semibold uppercase tracking-[0.3px] text-[#6b6b68]">Precitas</span>
+              </div>
+              <div className="text-[32px] font-semibold tracking-[-1.5px] text-[#0a0a0a] font-sans leading-none">{citasResumen.precitas}</div>
+              <div className="text-[11.5px] text-[#9b9b97]">pendientes de confirmar</div>
+            </div>
+            {/* Total */}
+            <div className="bg-white border border-[#e8e8e6] rounded-lg px-5 py-5 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-[5px] bg-[#f7f7f6] text-[#0a0a0a] flex items-center justify-center flex-shrink-0">
+                  <CalendarX className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[12px] font-semibold uppercase tracking-[0.3px] text-[#6b6b68]">Total citas</span>
+              </div>
+              <div className="text-[32px] font-semibold tracking-[-1.5px] text-[#0a0a0a] font-sans leading-none">{citasResumen.total}</div>
+              <div className="text-[11.5px] text-[#9b9b97]">en el período</div>
+            </div>
           </div>
-
-          {financialTab === "ventas" && (
-            <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-3.5">
-                <KPICard featured label="Ventas Totales" value={formatCurrency(metricas.ventas_totales)} change={metricas.crecimiento_ventas !== "0%" ? metricas.crecimiento_ventas : undefined} />
-                <KPICard label="Servicios" value={formatCurrency(metricas.ventas_servicios)} sub={`${extendedMetrics?.topServicios.reduce((s, i) => s + i.cantidad, 0) || 0} servicios · ${pctServicios}%`} />
-                <KPICard label="Productos" value={formatCurrency(metricas.ventas_productos)} sub={`${extendedMetrics?.topProductos.reduce((s, i) => s + i.cantidad, 0) || 0} ventas · ${pctProductos}%`} />
-                <KPICard label="Transacciones" value={String(metricas.cantidad_ventas || 0)} sub={`Ticket prom: ${formatCurrency(metricas.ticket_promedio)}`} />
-                <KPICard label="Venta Promedio/Día" value={formatCurrency(ventaPromDia)} sub={`${dias} días del período`} />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-3.5">
-                <Card title="Ventas cobradas por método de pago" titleSub="solo dinero recibido">
-                  {paymentRows.length > 0 ? (
-                    <>
-                      {paymentRows.map((row) => (
-                        <RowItem
-                          key={row.name}
-                          name={row.name}
-                          value={formatCurrency(row.value)}
-                          sub={`${Math.round((row.value / (totalPayments || 1)) * 100)}%`}
-                          barPct={totalPayments > 0 ? (row.value / totalPayments) * 100 : 0}
-                        />
-                      ))}
-                      <div className="flex justify-between pt-2.5 text-[13px] font-bold border-t-2 border-slate-200 mt-1">
-                        <span>Total cobrado</span>
-                        <span>{formatCurrency(totalPayments)}</span>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-xs text-slate-400 py-4 text-center">Sin datos de pagos para este período</p>
-                  )}
-                </Card>
-
-                <Card title="Top servicios por ingreso" titleSub={getPeriodDisplay()} scrollable>
-                  {extendedMetrics && extendedMetrics.topServicios.length > 0 ? (
-                    extendedMetrics.topServicios.map((s) => (
-                      <RowItem key={s.nombre} name={s.nombre} value={formatCurrency(s.total)} sub={`${s.cantidad} servicios`} />
-                    ))
-                  ) : (
-                    <p className="text-xs text-slate-400 py-4 text-center">Sin datos de servicios para este período</p>
-                  )}
-                </Card>
-              </div>
-            </>
-          )}
-
-          {financialTab === "pl" && (
-            <>
-              <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-lg text-[11px] text-slate-500 leading-relaxed mb-4">
-                <span className="font-semibold text-slate-700">Estado de Resultados (P&L)</span> — Rentabilidad real de la operación. Los traslados entre cajas NO aparecen aquí. Comisiones, arriendo y nómina SÍ aparecen aunque se paguen desde caja mayor.
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-3.5">
-                <KPICard featured label="Ingresos Ventas" value={formatCurrency(metricas.ventas_totales)} sub="Servicios + Productos" />
-                <KPICard label="Ingresos Extras" value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.pl.ingresos) : "–"} sub="Movimientos manuales" />
-                <KPICard label="Egresos Manuales" value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.pl.egresos) : "–"} sub="Caja mayor + menor" />
-                <KPICard label="Devoluciones" value={`-${formatCurrency(0)}`} valueClassName="text-red-600" sub="Reduce ingresos" />
-                <KPICard label="Total Ventas Netas" value={formatCurrency(metricas.ventas_totales)} sub="Servicios + Productos" />
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-                <Card title="Estado de Resultados" titleSub={getPeriodDisplay()}>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 pt-1 mb-1">Ingresos operacionales</div>
-                  <RowItem name={<>Servicios <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto · Facturación</span></>} value={formatCurrency(metricas.ventas_servicios)} />
-                  <RowItem name={<>Productos vendidos <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto · Facturación</span></>} value={formatCurrency(metricas.ventas_productos)} />
-                  <RowItem name={<>Devoluciones a clientes <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual</span></>} value={<span className="text-red-600">-{formatCurrency(0)}</span>} />
-                  <div className="flex justify-between pt-2 pb-1 text-[13px] font-bold border-t border-slate-200 mt-1">
-                    <span>Total ingresos</span><span>{formatCurrency(metricas.ventas_totales)}</span>
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mt-3 mb-1">Costos directos</div>
-                  <RowItem name={<>Comisiones estilistas <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto · Citas</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Insumos usados <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual · Caja Mayor</span></>} value={<span className="text-slate-400">—</span>} />
-                  <div className="flex justify-between pt-2 pb-1 text-[13px] font-bold border-t border-slate-200 mt-1">
-                    <span>Utilidad bruta</span><span className="text-slate-400">—</span>
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mt-3 mb-1">Gastos fijos</div>
-                  <RowItem name={<>Arriendo ...</>}value={loadingResumen ? "…" : egresoMayorCat("arriendo") > 0 ? <span className="text-red-600">-{formatCurrency(egresoMayorCat("arriendo"))}</span>: <span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Nómina administrativa ...</>}value={loadingResumen ? "…" : egresoMayorCat("nomina") > 0 ? <span className="text-red-600">-{formatCurrency(egresoMayorCat("nomina"))}</span> : <span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Servicios públicos ...</>} value={loadingResumen ? "…" : egresoMayorCat("servicios_publicos") > 0 ? <span className="text-red-600">-{formatCurrency(egresoMayorCat("servicios_publicos"))}</span> : <span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Impuestos ...</>} value={loadingResumen ? "…" : egresoMayorCat("impuestos") > 0 ? <span className="text-red-600">-{formatCurrency(egresoMayorCat("impuestos"))}</span> : <span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Otros gastos fijos <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual · Caja Mayor</span></>} value={<span className="text-slate-400">—</span>} />
-                  <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mt-3 mb-1">Gastos variables</div>
-                  <RowItem name={<>Gastos operativos caja menor ...</>} value={loadingResumen ? "…" : resumenFinanciero ? <span className="text-red-600">-{formatCurrency(resumenFinanciero.pl.egresos_menor_total ?? 0)}</span> : <span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Propinas estilistas <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Pass-through</span></>} value={<span className="text-slate-400">—</span>} />
-                  <div className="flex justify-between pt-2 pb-1 text-[13px] font-bold border-t border-slate-200 mt-1">
-                    <span>Total egresos manuales</span>
-                    <span>{loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.pl.egresos) : "–"}</span>
-                  </div>
-                  <div className="flex justify-between pt-3 text-[16px] font-bold text-slate-800 border-t-2 border-slate-800 mt-1">
-                    <span>Utilidad neta estimada</span>
-                    <span className={resumenFinanciero && resumenFinanciero.pl.utilidad < 0 ? "text-red-600" : "text-green-600"}>
-                      {loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.pl.utilidad) : "–"}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-[10px] text-slate-400">* Parcial — faltan comisiones, arriendo y nómina por registrar</div>
-                  {resumenFinanciero?.pl.aclaracion && (
-                    <div className="mt-1 text-[10px] text-slate-400 italic">{resumenFinanciero.pl.aclaracion}</div>
-                  )}
-                </Card>
-
-                <div className="flex flex-col gap-3.5">
-                  <Card title="Gastos por categoría" titleSub="% del total">
-                    {(["Comisiones", "Arriendo", "Nómina admin", "Insumos", "Impuestos", "Servicios públicos", "Gastos operativos", "Devoluciones", "Otros"]).map((name) => (
-                      <RowItem key={name} name={name} barPct={0} value="–" sub="—%" />
-                    ))}
-                  </Card>
-                  <Card title="Origen de los datos">
-                    <div className="text-[11px] text-slate-500 leading-relaxed space-y-2.5">
-                      <div><span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border border-slate-200 text-slate-400">Auto · Facturación</span> — Se calcula automáticamente de las ventas cobradas en el módulo de Facturación.</div>
-                      <div><span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border border-slate-200 text-slate-400">Auto · Citas</span> — Se calcula automáticamente del % de comisión configurado por estilista.</div>
-                      <div><span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border border-slate-200 text-slate-400">Auto · Caja Menor</span> — Viene de los egresos registrados por recepción en la caja del punto de venta.</div>
-                      <div><span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border border-dashed border-slate-300 text-slate-500">Manual · Caja Mayor</span> — Lo registra el administrador en la pestaña <span className="font-semibold text-slate-700">"Registrar movimientos"</span>.</div>
-                    </div>
-                  </Card>
-                </div>
-              </div>
-            </>
-          )}
-
-          {financialTab === "cajas" && (
-            <>
-              <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-lg text-[11px] text-slate-500 leading-relaxed mb-4">
-                <span className="font-semibold text-slate-700">Caja Menor</span> = efectivo en la sede. <span className="font-semibold text-slate-700">Caja Mayor</span> = cuenta principal del negocio.
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-3.5">
-                <Card title="Caja Menor" titleSub="Efectivo en sede · Auto + manual">
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    {[
-                      ["Saldo", loadingResumen ? "…" : resumenFinanciero ? formatCurrency(saldoCajaMenorReal) : "–"],
-                      ["Entradas", formatCurrency(metricas.metodos_pago?.efectivo ?? 0)],
-                      ["Traslados →", loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.menor_a_mayor) : "–"],
-                    ].map(([lbl, val]) => (
-                      <div key={lbl} className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2.5">
-                        <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-[0.4px] mb-1">{lbl}</div>
-                        <div className="text-[17px] font-bold text-slate-800">{val}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mb-1">Entradas</div>
-                  <RowItem name={<>Cobros efectivo <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.efectivo ?? 0)} />
-                  <RowItem name={<>Anticipos efectivo <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Tránsito</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<span className="text-slate-400">⇄ Recibido de Caja Mayor <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual</span></span>} value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.mayor_a_menor) : "–"} />
-                  <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mt-3 mb-1">Salidas</div>
-                  <RowItem name={<>Gastos operativos <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual · Recepción</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Propinas estilistas <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Pass-through</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Devoluciones a clientes <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<span className="text-slate-400">⇄ Entregas a Caja Mayor <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual</span></span>} value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.menor_a_mayor) : "–"} />
-                  <div className="border-t border-slate-200 mt-2" />
-                  <div className="flex justify-between pt-3 text-[14px] font-bold text-slate-800">
-                    <span>Saldo caja menor</span>
-                    <span>{loadingResumen ? "…" : resumenFinanciero ? formatCurrency(saldoCajaMenorReal) : "–"}</span>
-                  </div>
-                </Card>
-
-                <Card title="Caja Mayor" titleSub="Cuenta principal · Auto + manual">
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    {[
-                      ["Saldo", loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.cajas.caja_mayor) : "–"],
-                      ["Entradas digitales", formatCurrency( (metricas.metodos_pago?.transferencia  ?? 0) + (metricas.metodos_pago?.tarjeta  ?? 0) + (metricas.metodos_pago?.tarjeta_credito ?? 0) + (metricas.metodos_pago?.tarjeta_debito  ?? 0) + (metricas.metodos_pago?.addi ?? 0) + (metricas.metodos_pago?.sin_pago ?? 0) + (metricas.metodos_pago?.otros ?? 0))],
-                      ["Traslados →", loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.mayor_a_menor) : "–"],
-                    ].map(([lbl, val]) => (
-                      <div key={lbl} className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2.5">
-                        <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-[0.4px] mb-1">{lbl}</div>
-                        <div className="text-[17px] font-bold text-slate-800">{val}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mb-1">Entradas</div>
-                  <RowItem name={<>Efectivo <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.efectivo ?? 0)} />
-                  <RowItem name={<>Transferencia <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.transferencia ?? 0)} />
-                  <RowItem name={<>Tarjeta <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.tarjeta ?? 0)} />
-                  <RowItem name={<>Tarjeta de crédito <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.tarjeta_credito ?? 0)} />
-                  <RowItem name={<>Tarjeta de débito <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.tarjeta_debito ?? 0)} />
-                  <RowItem name={<>Link de Pago <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.link_de_pago ?? 0)} />
-                  <RowItem name={<>Gift Card <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Addi <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.addi ?? 0)} />
-                  <RowItem name={<>Abono transferencia <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Descuento nómina <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Sin pago <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.sin_pago ?? 0)} />
-                  <RowItem name={<>Otros <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Auto</span></>} value={formatCurrency(metricas.metodos_pago?.otros ?? 0)} />
-                  <RowItem name={<>Anticipos digital <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-blue-50 text-blue-600 border border-blue-200 ml-1.5">Tránsito</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Ingresos manuales <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual · Admin</span></>} value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.pl.ingresos) : "–"} />
-                  <RowItem name={<span className="text-slate-400">⇄ Recibido de Caja Menor <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual</span></span>} value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.menor_a_mayor) : "–"} />
-                  <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mt-3 mb-1">Salidas</div>
-                  <RowItem name={<>Egresos manuales <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual · Admin</span></>} value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.pl.egresos) : "–"} />
-                  <RowItem name={<>Nómina administrativa <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual · Admin</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<>Devoluciones a clientes <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual</span></>} value={<span className="text-slate-400">—</span>} />
-                  <RowItem name={<span className="text-slate-400">⇄ Base a Caja Menor <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 ml-1.5">Manual</span></span>} value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.mayor_a_menor) : "–"} />
-                  <div className="border-t border-slate-200 mt-2" />
-                  <div className={`flex justify-between pt-3 text-[14px] font-bold ${resumenFinanciero && resumenFinanciero.cajas.caja_mayor < 0 ? "text-red-600" : "text-slate-800"}`}>
-                    <span>Saldo caja mayor</span>
-                    <span>{loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.cajas.caja_mayor) : "–"}</span>
-                  </div>
-                </Card>
-              </div>
-
-              <Card title="Posición consolidada">
-                <div className="grid grid-cols-3 gap-2.5">
-                  <div className="bg-white border border-slate-200 rounded-[10px] px-4 py-3.5">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-[0.4px] mb-1.5">Caja Menor</div>
-                    <div className="text-[22px] font-bold text-slate-800">
-                      {loadingResumen ? "…" : resumenFinanciero ? formatCurrency(saldoCajaMenorReal) : "–"}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Efectivo en sede</div>
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-[10px] px-4 py-3.5">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-[0.4px] mb-1.5">Caja Mayor</div>
-                    <div className="text-[22px] font-bold text-slate-800">
-                      {loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.cajas.caja_mayor) : "–"}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Cuenta principal</div>
-                  </div>
-                  <div className="bg-white border-2 border-slate-800 rounded-[10px] px-4 py-3.5">
-                    <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-[0.4px] mb-1.5">Total consolidado</div>
-                    <div className="text-[22px] font-bold text-slate-800">
-                      {loadingResumen ? "…" : resumenFinanciero ? formatCurrency(saldoConsolidadoReal) : "–"}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Los traslados no cambian este número</div>
-                  </div>
-                </div>
-              </Card>
-              <div className="mt-4">
-                <div className="bg-white border border-slate-200 rounded-[10px] p-[18px]">
-                  <div className="text-[13px] font-bold mb-4 text-slate-800">Historial de cierres de caja</div>
-                  {loadingCierres ? (
-                    <div className="py-6 text-center text-[11px] text-slate-400">Cargando historial…</div>
-                  ) : cierresHistorial.length > 0 ? (
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr>
-                          {["Fecha", "Sede", "Responsable", "Sistema esperaba", "Contado", "Diferencia", "Estado", "Nota", ""].map((h) => (
-                            <th key={h} className="text-left text-[9px] font-bold uppercase tracking-[0.5px] text-slate-400 pb-2 border-b border-slate-200">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cierresHistorial.map((c: any, idx: number) => {
-                          const diff = c.diferencia ?? ((c.efectivo_contado ?? 0) - (c.efectivo_esperado ?? 0));
-                          const isOpen = !c.efectivo_contado && c.efectivo_contado !== 0;
-                          return (
-                            <tr key={c.cierre_id || idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                              <td className="py-2.5 text-[12px] text-slate-600">{c.fecha}</td>
-                              <td className="py-2.5 text-[11px] text-slate-500">{c.sede_nombre || sedes.find((s) => s.sede_id === c.sede_id)?.nombre || "—"}</td>
-                              <td className="py-2.5 text-[11px] text-slate-500 max-w-[120px] truncate">{c.cerrado_por_nombre || c.cerrado_por || "—"}</td>
-                              <td className="py-2.5 text-[12px] text-slate-800 tabular-nums">{formatCurrency(c.efectivo_esperado ?? 0)}</td>
-                              <td className="py-2.5 text-[12px] text-slate-800 tabular-nums">{isOpen ? "—" : formatCurrency(c.efectivo_contado ?? 0)}</td>
-                              <td className="py-2.5 text-[12px] font-semibold tabular-nums">
-                                {isOpen ? <span className="text-slate-400">—</span> :
-                                  diff === 0 ? <span className="text-slate-400">$ 0</span> :
-                                  diff > 0 ? <span className="text-green-600">+{formatCurrency(diff)}</span> :
-                                  <span className="text-red-600">-{formatCurrency(Math.abs(diff))}</span>}
-                              </td>
-                              <td className="py-2.5">
-                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                  isOpen ? "bg-blue-50 text-blue-600 border border-blue-200" :
-                                  diff === 0 ? "bg-green-50 text-green-600 border border-green-200" :
-                                  "bg-amber-50 text-amber-600 border border-amber-200"
-                                }`}>
-                                  {isOpen ? "Abierto" : diff === 0 ? "Cuadrado" : "Con diferencia"}
-                                </span>
-                              </td>
-                              <td className="py-2.5 text-[11px] text-slate-500 max-w-[180px] truncate">{c.observaciones || "—"}</td>
-                              <td className="py-2.5">
-                                {!isOpen && (
-                                  <button
-                                    onClick={async () => {
-                                      try {
-                                        const { blob, filename } = await cashService.getReporteExcel({
-                                          sede_id: c.sede_id || sedeId,
-                                          fecha: c.fecha,
-                                        });
-                                        const url = URL.createObjectURL(blob);
-                                        const a = document.createElement("a");
-                                        a.href = url;
-                                        a.download = filename || `cierre-${c.fecha}.xlsx`;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        document.body.removeChild(a);
-                                        URL.revokeObjectURL(url);
-                                      } catch {
-                                        alert("No se pudo descargar el reporte");
-                                      }
-                                    }}
-                                    className="px-2.5 py-1 border border-slate-200 rounded text-[10px] font-medium text-slate-600 hover:bg-slate-100 whitespace-nowrap"
-                                  >
-                                    ↓ Excel
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="py-6 text-center text-[11px] text-slate-400">No hay cierres de caja registrados para este período. Usa la pestaña "Cierre de caja" para ejecutar un cierre.</div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          {financialTab === "traslados" && (
-            <>
-              <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-lg text-[11px] text-slate-500 leading-relaxed mb-4">
-                <span className="font-semibold text-slate-700">Traslados entre cajas = movimientos internos.</span> No son ingresos ni gastos. El total del negocio no cambia. Solo redistribuyen el dinero entre Caja Menor y Caja Mayor.
-              </div>
-              <div className="grid grid-cols-3 gap-2.5 mb-4">
-                <KPICard label="Menor → Mayor" value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.menor_a_mayor) : "–"} sub="Entregas" />
-                <KPICard label="Mayor → Menor" value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.mayor_a_menor) : "–"} sub="Envíos de base" />
-                <KPICard featured label="Neto Trasladado" value={loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.menor_a_mayor - resumenFinanciero.traslados.mayor_a_menor) : "–"} sub="de Menor a Mayor" />
-              </div>
-              <Card title="Registro de traslados" action={<button onClick={() => { setFinancialTab("registrar"); setRegistrarSubTab("traslado"); }} className="px-3 py-1.5 bg-slate-800 text-white rounded-md text-[11px] font-semibold hover:bg-slate-700">+ Registrar traslado</button>}>
-                {(() => {
-                  const trasladosMov = movimientosManuales.filter((m) => m.tipo === "Traslado");
-                  return trasladosMov.length > 0 ? (
-                    <table className="w-full border-collapse">
-                      <thead><tr>{["Fecha", "Dirección", "Monto", "Registrado por", "Observaciones"].map((h, i) => (<th key={i} className="text-left text-[9px] font-bold uppercase tracking-[0.5px] text-slate-400 pb-2 border-b border-slate-200">{h}</th>))}</tr></thead>
-                      <tbody>{trasladosMov.map((m) => (
-                        <tr key={m.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                          <td className="py-2.5 text-[12px] text-slate-600">{m.fecha}</td>
-                          <td className="py-2.5"><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">{m.caja}</span></td>
-                          <td className="py-2.5 text-[12px] font-semibold text-slate-800 tabular-nums">{formatCurrency(m.monto)}</td>
-                          <td className="py-2.5 text-[11px] text-slate-500">–</td>
-                          <td className="py-2.5 text-[11px] text-slate-500">{m.concepto || "–"}</td>
-                        </tr>
-                      ))}</tbody>
-                    </table>
-                  ) : (<div className="py-8 text-center text-[11px] text-slate-400">No hay traslados registrados para este período. Regístralos en "Registrar movimientos".</div>);
-                })()}
-              </Card>
-            </>
-          )}
-
-          {financialTab === "registrar" && (
-            <>
-              <div className="text-[12px] text-slate-500 leading-relaxed mb-4">
-                Aquí el administrador registra los movimientos que <span className="font-semibold text-slate-700">no pasan por la caja registradora</span>: arriendo, nómina, comisiones, impuestos, proveedores, ingresos extras, devoluciones a clientes y traslados entre cajas.
-              </div>
-              {!isSpecificSede && sedes.length > 0 && (
-                <div className="mb-4 flex flex-col gap-1">
-                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Sede para este movimiento</label>
-                  <select
-                    value={registrarSedeId}
-                    onChange={(e) => setRegistrarSedeId(e.target.value)}
-                    className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800 max-w-xs"
-                  >
-                    <option value="">Seleccionar sede...</option>
-                    {sedes.map((s) => (
-                      <option key={s.sede_id} value={s.sede_id}>{s.nombre || s.sede_id}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {registrarError && (
-                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-700">{registrarError}</div>
-              )}
-              {registrarSuccess && (
-                <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg text-[11px] text-green-700">{registrarSuccess}</div>
-              )}
-              {registrarSedeId && <div className="flex gap-1.5 mb-4 flex-wrap">
-                {([
-                  { id: "egreso-mayor" as const, label: "Egreso Caja Mayor" },
-                  { id: "ingreso-mayor" as const, label: "Ingreso Caja Mayor" },
-                  { id: "traslado" as const, label: "Traslado entre cajas" },
-                  { id: "egreso-menor" as const, label: "Egreso Caja Menor" },
-                  { id: "devolucion" as const, label: "Devolución a cliente" },
-                  { id: "propina" as const, label: "Propina estilista" },
-                  { id: "nomina" as const, label: "Nómina administrativa" },
-                ]).map((st) => (
-                  <button
-                    key={st.id}
-                    onClick={() => setRegistrarSubTab(st.id)}
-                    className={`px-4 py-2 border rounded-lg text-[11px] font-medium transition-colors ${
-                      registrarSubTab === st.id
-                        ? "bg-slate-800 text-white border-slate-800"
-                        : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-                    }`}
-                  >
-                    {st.label}
-                  </button>
-                ))}
-              </div>}
-
-              {registrarSedeId && registrarSubTab === "egreso-mayor" && (
-                <div className="bg-white border border-slate-200 rounded-[10px] p-5 mb-4">
-                  <div className="text-[14px] font-bold text-slate-800 mb-1">Registrar egreso — Caja Mayor</div>
-                  <div className="text-[11px] text-slate-500 mb-4 leading-relaxed">Para gastos que se pagan desde la cuenta principal: arriendo, nómina, comisiones, impuestos, proveedores, servicios públicos.</div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Concepto</label><input value={egresoMayorForm.concepto} onChange={(e) => setEgresoMayorForm((f) => ({ ...f, concepto: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="Ej: Arriendo local abril 2026" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Monto</label><input value={egresoMayorForm.monto} onChange={(e) => setEgresoMayorForm((f) => ({ ...f, monto: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="$0" /></div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Categoría de gasto</label>
-                      <select value={egresoMayorForm.categoria} onChange={(e) => setEgresoMayorForm((f) => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800">
-                        <option value="">Seleccionar categoría...</option>
-                        <option>Arriendo</option><option>Nómina administrativa</option><option>Comisiones estilistas</option><option>Servicios públicos</option><option>Impuestos</option><option>Insumos / Proveedores</option><option>Mantenimiento</option><option>Marketing y publicidad</option><option>Software y herramientas</option><option>Otro gasto fijo</option><option>Otro gasto operativo</option>
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Método de pago</label>
-                      <select value={egresoMayorForm.metodo} onChange={(e) => setEgresoMayorForm((f) => ({ ...f, metodo: e.target.value as typeof f.metodo }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800">
-                        {CASH_PAYMENT_METHOD_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Fecha</label><DatePicker value={egresoMayorForm.fecha} onChange={(v) => setEgresoMayorForm((f) => ({ ...f, fecha: v }))} /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Referencia / N° factura</label><input value={egresoMayorForm.referencia} onChange={(e) => setEgresoMayorForm((f) => ({ ...f, referencia: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="Opcional" /></div>
-                    <div className="flex flex-col gap-1 col-span-2"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Observaciones</label><textarea value={egresoMayorForm.observaciones} onChange={(e) => setEgresoMayorForm((f) => ({ ...f, observaciones: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[12px] resize-y min-h-[56px] leading-relaxed focus:outline-none focus:border-slate-800" placeholder="Detalles adicionales..." /></div>
-                  </div>
-                  <div className="flex gap-2 justify-end mt-4">
-                    <button onClick={() => setEgresoMayorForm({ concepto: "", monto: "", categoria: "", metodo: CASH_PAYMENT_METHOD_OPTIONS[0].value, fecha: resolveToday(), referencia: "", observaciones: "" })} className="px-4 py-2 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                    <button onClick={handleEgresoMayor} disabled={registrarLoading} className="px-4 py-2 bg-slate-800 text-white rounded-md text-[12px] font-semibold hover:bg-slate-700 disabled:opacity-60">{registrarLoading ? "Registrando..." : "Registrar egreso"}</button>
-                  </div>
-                </div>
-              )}
-
-              {registrarSedeId && registrarSubTab === "ingreso-mayor" && (
-                <div className="bg-white border border-slate-200 rounded-[10px] p-5 mb-4">
-                  <div className="text-[14px] font-bold text-slate-800 mb-1">Registrar ingreso — Caja Mayor</div>
-                  <div className="text-[11px] text-slate-500 mb-4 leading-relaxed">Para ingresos que no vienen de ventas a clientes: devoluciones de proveedores, intereses bancarios, ingresos extraordinarios.</div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Concepto</label><input value={ingresoMayorForm.concepto} onChange={(e) => setIngresoMayorForm((f) => ({ ...f, concepto: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="Ej: Devolución proveedor XYZ" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Monto</label><input value={ingresoMayorForm.monto} onChange={(e) => setIngresoMayorForm((f) => ({ ...f, monto: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="$0" /></div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Tipo de ingreso</label>
-                      <select value={ingresoMayorForm.tipo} onChange={(e) => setIngresoMayorForm((f) => ({ ...f, tipo: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800">
-                        <option value="">Seleccionar tipo...</option><option>Devolución de proveedor</option><option>Intereses bancarios</option><option>Ingreso extraordinario</option><option>Ajuste contable</option><option>Otro</option>
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Método</label>
-                      <select value={ingresoMayorForm.metodo} onChange={(e) => setIngresoMayorForm((f) => ({ ...f, metodo: e.target.value as typeof f.metodo }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800">
-                        {CASH_PAYMENT_METHOD_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Fecha</label><DatePicker value={ingresoMayorForm.fecha} onChange={(v) => setIngresoMayorForm((f) => ({ ...f, fecha: v }))} /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Referencia</label><input value={ingresoMayorForm.referencia} onChange={(e) => setIngresoMayorForm((f) => ({ ...f, referencia: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="Opcional" /></div>
-                    <div className="flex flex-col gap-1 col-span-2"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Observaciones</label><textarea value={ingresoMayorForm.observaciones} onChange={(e) => setIngresoMayorForm((f) => ({ ...f, observaciones: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[12px] resize-y min-h-[56px] leading-relaxed focus:outline-none focus:border-slate-800" placeholder="Detalles adicionales..." /></div>
-                  </div>
-                  <div className="flex gap-2 justify-end mt-4">
-                    <button onClick={() => setIngresoMayorForm({ concepto: "", monto: "", tipo: "", metodo: CASH_PAYMENT_METHOD_OPTIONS[0].value, fecha: resolveToday(), referencia: "", observaciones: "" })} className="px-4 py-2 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                    <button onClick={handleIngresoMayor} disabled={registrarLoading} className="px-4 py-2 bg-slate-800 text-white rounded-md text-[12px] font-semibold hover:bg-slate-700 disabled:opacity-60">{registrarLoading ? "Registrando..." : "Registrar ingreso"}</button>
-                  </div>
-                </div>
-              )}
-
-              {registrarSedeId && registrarSubTab === "traslado" && (
-                <div className="bg-white border border-slate-200 rounded-[10px] p-5 mb-4">
-                  <div className="text-[14px] font-bold text-slate-800 mb-1">Registrar traslado entre cajas</div>
-                  <div className="text-[11px] text-slate-500 mb-4 leading-relaxed">Para mover dinero entre Caja Menor y Caja Mayor. No es un gasto ni un ingreso — no afecta el P&L.</div>
-                  <div className="flex items-center gap-2.5 p-3 bg-slate-50 border border-slate-100 rounded-lg mb-4">
-                    <div className="flex-1 text-center bg-white border border-slate-200 rounded-md px-3 py-2.5">
-                      <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-[0.3px]">Origen</div>
-                      <div className="text-[14px] font-bold text-slate-800 mt-0.5">{transferDir === "menor-mayor" ? "Caja Menor" : "Caja Mayor"}</div>
-                    </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-slate-300 text-xl">→</span>
-                      <button onClick={() => setTransferDir((d) => d === "menor-mayor" ? "mayor-menor" : "menor-mayor")} className="text-[9px] text-slate-500 underline hover:text-slate-700">Invertir</button>
-                    </div>
-                    <div className="flex-1 text-center bg-white border border-slate-200 rounded-md px-3 py-2.5">
-                      <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-[0.3px]">Destino</div>
-                      <div className="text-[14px] font-bold text-slate-800 mt-0.5">{transferDir === "menor-mayor" ? "Caja Mayor" : "Caja Menor"}</div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Monto a trasladar</label><input value={trasladoForm.monto} onChange={(e) => setTrasladoForm((f) => ({ ...f, monto: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="$0" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Fecha</label><DatePicker value={trasladoForm.fecha} onChange={(v) => setTrasladoForm((f) => ({ ...f, fecha: v }))} /></div>
-                    <div className="flex flex-col gap-1 col-span-2"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Concepto</label><input value={trasladoForm.concepto} onChange={(e) => setTrasladoForm((f) => ({ ...f, concepto: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="Ej: Entrega excedente diario" /></div>
-                    <div className="flex flex-col gap-1 col-span-2"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Observaciones</label><textarea value={trasladoForm.observaciones} onChange={(e) => setTrasladoForm((f) => ({ ...f, observaciones: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[12px] resize-y min-h-[56px] leading-relaxed focus:outline-none focus:border-slate-800" placeholder="Opcional" /></div>
-                  </div>
-                  <div className="flex gap-2 justify-end mt-4">
-                    <button onClick={() => setTrasladoForm({ monto: "", fecha: resolveToday(), concepto: "", observaciones: "" })} className="px-4 py-2 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                    <button onClick={handleTraslado} disabled={registrarLoading} className="px-4 py-2 bg-slate-800 text-white rounded-md text-[12px] font-semibold hover:bg-slate-700 disabled:opacity-60">{registrarLoading ? "Registrando..." : "Registrar traslado"}</button>
-                  </div>
-                </div>
-              )}
-
-              {registrarSedeId && registrarSubTab === "egreso-menor" && (
-                <div className="bg-white border border-slate-200 rounded-[10px] p-5 mb-4">
-                  <div className="text-[14px] font-bold text-slate-800 mb-1">Registrar egreso — Caja Menor</div>
-                  <div className="text-[11px] text-slate-500 mb-4 leading-relaxed">Para gastos pequeños del día a día: almuerzos, domicilios, propinas, papelería.</div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Concepto</label><input value={egresoMenorForm.concepto} onChange={(e) => setEgresoMenorForm((f) => ({ ...f, concepto: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="Ej: Almuerzo Delcy" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Monto</label><input value={egresoMenorForm.monto} onChange={(e) => setEgresoMenorForm((f) => ({ ...f, monto: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="$0" /></div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Categoría</label>
-                      <select value={egresoMenorForm.categoria} onChange={(e) => setEgresoMenorForm((f) => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800">
-                        <option>Gasto operativo</option><option>Propina</option><option>Alimentación</option><option>Domicilio / mensajería</option><option>Papelería / insumos menores</option><option>Otro</option>
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Fecha</label><DatePicker value={egresoMenorForm.fecha} onChange={(v) => setEgresoMenorForm((f) => ({ ...f, fecha: v }))} /></div>
-                    <div className="flex flex-col gap-1 col-span-2"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Observaciones</label><textarea value={egresoMenorForm.observaciones} onChange={(e) => setEgresoMenorForm((f) => ({ ...f, observaciones: e.target.value }))} className="px-3 py-2 border border-slate-200 rounded-md text-[12px] resize-y min-h-[56px] leading-relaxed focus:outline-none focus:border-slate-800" placeholder="Opcional" /></div>
-                  </div>
-                  <div className="flex gap-2 justify-end mt-4">
-                    <button onClick={() => setEgresoMenorForm({ concepto: "", monto: "", categoria: "Gasto operativo", fecha: resolveToday(), observaciones: "" })} className="px-4 py-2 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                    <button onClick={handleEgresoMenor} disabled={registrarLoading} className="px-4 py-2 bg-slate-800 text-white rounded-md text-[12px] font-semibold hover:bg-slate-700 disabled:opacity-60">{registrarLoading ? "Registrando..." : "Registrar egreso"}</button>
-                  </div>
-                </div>
-              )}
-
-              {registrarSedeId && registrarSubTab === "devolucion" && (
-                <div className="bg-white border border-slate-200 rounded-[10px] p-5 mb-4">
-                  <div className="text-[14px] font-bold text-slate-800 mb-1">Registrar devolución a cliente</div>
-                  <div className="text-[11px] text-slate-500 mb-4 leading-relaxed">Reduce los ingresos del P&L. No es un gasto operativo. Debe vincularse a la venta original.</div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Número de venta</label><input className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="Ej: SD-26470" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Monto a devolver</label><input className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="$ 0" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Sale de</label><select className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800"><option>Caja Menor (efectivo)</option><option>Caja Mayor (transferencia)</option></select></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Motivo</label><select className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800"><option>Cliente insatisfecha</option><option>Servicio no realizado</option><option>Error de cobro</option><option>Otro</option></select></div>
-                    <div className="flex flex-col gap-1 col-span-2"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Observaciones</label><textarea className="px-3 py-2 border border-slate-200 rounded-md text-[12px] resize-y min-h-[56px] leading-relaxed focus:outline-none focus:border-slate-800" placeholder="Describe el motivo con detalle" /></div>
-                  </div>
-                  <div className="flex gap-2 justify-end mt-4"><button className="px-4 py-2 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-50">Cancelar</button><button className="px-4 py-2 bg-slate-800 text-white rounded-md text-[12px] font-semibold hover:bg-slate-700">Registrar devolución</button></div>
-                </div>
-              )}
-              {registrarSedeId && registrarSubTab === "propina" && (
-                <div className="bg-white border border-slate-200 rounded-[10px] p-5 mb-4">
-                  <div className="text-[14px] font-bold text-slate-800 mb-1">Registrar propina — estilista</div>
-                  <div className="text-[11px] text-slate-500 mb-4 leading-relaxed">Pass-through: no afecta el P&L. Si la propina llegó digital, primero se hace un traslado Caja Mayor → Caja Menor.</div>
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4 text-[11px] text-amber-700"><span className="font-semibold text-slate-800">⚠ Importante:</span> Si la propina fue pagada por tarjeta o transferencia, primero registra el traslado Caja Mayor → Caja Menor antes de continuar.</div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Estilista</label><select className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800"><option>Seleccionar estilista...</option></select></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Monto</label><input className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="$ 0" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Método original de la propina</label><select className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800"><option>Efectivo (ya estaba en Caja Menor)</option><option>Digital — traslado ya registrado</option></select></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Fecha</label><DatePicker value={resolveToday()} onChange={() => {}} /></div>
-                  </div>
-                  <div className="flex gap-2 justify-end mt-4"><button className="px-4 py-2 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-50">Cancelar</button><button className="px-4 py-2 bg-slate-800 text-white rounded-md text-[12px] font-semibold hover:bg-slate-700">Registrar propina</button></div>
-                </div>
-              )}
-              {registrarSedeId && registrarSubTab === "nomina" && (
-                <div className="bg-white border border-slate-200 rounded-[10px] p-5 mb-4">
-                  <div className="text-[14px] font-bold text-slate-800 mb-1">Registrar nómina administrativa</div>
-                  <div className="text-[11px] text-slate-500 mb-4 leading-relaxed">Personal administrativo: recepción, coordinadores, limpieza. Aparece en el P&L como gasto fijo.</div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Nombre del empleado</label><input className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="Ej: María González – Recepción" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Monto</label><input className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800" placeholder="$ 0" /></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Sale de</label><select className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800"><option>Caja Mayor (transferencia)</option><option>Caja Menor (efectivo)</option></select></div>
-                    <div className="flex flex-col gap-1"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Período que cubre</label><select className="px-3 py-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:border-slate-800"><option>Primera quincena</option><option>Segunda quincena</option><option>Mes completo</option><option>Otro</option></select></div>
-                    <div className="flex flex-col gap-1 col-span-2"><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Observaciones</label><textarea className="px-3 py-2 border border-slate-200 rounded-md text-[12px] resize-y min-h-[56px] leading-relaxed focus:outline-none focus:border-slate-800" placeholder="Opcional" /></div>
-                  </div>
-                  <div className="flex gap-2 justify-end mt-4"><button className="px-4 py-2 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-50">Cancelar</button><button className="px-4 py-2 bg-slate-800 text-white rounded-md text-[12px] font-semibold hover:bg-slate-700">Registrar nómina</button></div>
-                </div>
-              )}
-
-              {(() => {
-                // TODO: [PENDIENTE BACKEND] Conectar endpoint específico para historial de
-                // devoluciones, propinas y nómina cuando estén disponibles.
-                const isPendingTab = registrarSubTab === "devolucion" || registrarSubTab === "propina" || registrarSubTab === "nomina";
-
-                if (isPendingTab) {
-                  const pendingLabel: Record<string, string> = {
-                    devolucion: "Devoluciones a clientes",
-                    propina:    "Propinas estilistas",
-                    nomina:     "Nómina administrativa",
-                  };
-                  return (
-                    <Card title={`Últimos ${pendingLabel[registrarSubTab] ?? "movimientos"}`} titleSub="historial">
-                      <div className="py-8 text-center">
-                        <p className="text-[12px] text-slate-500">Sin registros disponibles</p>
-                        <p className="text-[10px] text-slate-400 mt-1">El historial estará disponible cuando se conecte el endpoint correspondiente.</p>
-                      </div>
-                    </Card>
-                  );
-                }
-
-                const movFiltrados = movimientosManuales.filter((m) => {
-                  if (registrarSubTab === "egreso-mayor")  return m.tipo === "Egreso"   && m.caja === "Caja Mayor";
-                  if (registrarSubTab === "ingreso-mayor") return m.tipo === "Ingreso"  && m.caja === "Caja Mayor";
-                  if (registrarSubTab === "traslado")      return m.tipo === "Traslado";
-                  if (registrarSubTab === "egreso-menor")  return m.tipo === "Egreso"   && m.caja === "Caja Menor";
-                  return false;
-                });
-                const tabLabel: Record<string, string> = {
-                  "egreso-mayor":  "Egresos Caja Mayor",
-                  "ingreso-mayor": "Ingresos Caja Mayor",
-                  "traslado":      "Traslados entre cajas",
-                  "egreso-menor":  "Egresos Caja Menor",
-                };
-                return (
-                  <Card title={`Últimos ${tabLabel[registrarSubTab] ?? "movimientos"}`} titleSub="10 más recientes" scrollable>
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr>
-                          {["Fecha", "Caja", "Tipo", "Concepto", "Categoría", "Monto"].map((h, i) => (
-                            <th key={i} className={`text-left text-[9px] font-bold uppercase tracking-[0.5px] text-slate-400 pb-2 border-b border-slate-200 ${i === 5 ? "text-right" : ""}`}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {movFiltrados.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="py-8 text-center text-[11px] text-slate-400">
-                              No hay movimientos registrados aún.
-                            </td>
-                          </tr>
-                        ) : movFiltrados.map((m) => (
-                          <tr key={m.id} className="border-b border-slate-100 last:border-0">
-                            <td className="py-2.5 text-[11px] text-slate-600">{m.fecha}</td>
-                            <td className="py-2.5 text-[11px] text-slate-600">{m.caja}</td>
-                            <td className="py-2.5">
-                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${m.tipo === "Egreso" ? "bg-red-50 text-red-600" : m.tipo === "Ingreso" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>{m.tipo}</span>
-                            </td>
-                            <td className="py-2.5 text-[11px] text-slate-700 font-medium max-w-[160px] truncate">{m.concepto}</td>
-                            <td className="py-2.5 text-[11px] text-slate-500">{m.categoria}</td>
-                            <td className="py-2.5 text-[11px] text-right font-semibold text-slate-800">{formatMoney(m.monto, monedaUsuario)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </Card>
-                );
-              })()}
-            </>
-          )}
-
-          {financialTab === "cierre" && (
-            <>
-              {loadingCierres ? (
-                <div className="py-12 text-center text-[11px] text-slate-400">Cargando datos de cierre…</div>
-              ) : cierreHoy ? (
-                /* ── Cierre ya realizado hoy ── */
-                <div className="max-w-[640px]">
-                  <div className="text-[17px] font-semibold text-slate-800 mb-1">Cierre de caja — {cierreHoy.fecha}</div>
-                  <div className="text-[13px] text-slate-400 mb-5">{cierreHoy.sede_nombre || sedes.find((s) => s.sede_id === sedeId)?.nombre || "Sede"} · Cierre registrado</div>
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg mb-5">
-                    <div className="text-[13px] font-semibold text-green-700 mb-2">✓ Cierre del día completado</div>
-                    <div className="grid grid-cols-2 gap-3 text-[12px]">
-                      <div><span className="text-slate-500">Esperado:</span> <span className="font-semibold text-slate-800">{formatCurrency(cierreHoy.efectivo_esperado ?? 0)}</span></div>
-                      <div><span className="text-slate-500">Contado:</span> <span className="font-semibold text-slate-800">{formatCurrency(cierreHoy.efectivo_contado ?? 0)}</span></div>
-                      <div><span className="text-slate-500">Diferencia:</span> <span className={`font-semibold ${(cierreHoy.diferencia ?? 0) === 0 ? "text-slate-400" : (cierreHoy.diferencia ?? 0) > 0 ? "text-green-600" : "text-red-600"}`}>{(cierreHoy.diferencia ?? 0) > 0 ? "+" : ""}{formatCurrency(cierreHoy.diferencia ?? 0)}</span></div>
-                      <div><span className="text-slate-500">Estado:</span> <span className="font-semibold text-slate-800">{cierreHoy.estado ?? "cerrado"}</span></div>
-                    </div>
-                    {cierreHoy.observaciones && <div className="mt-2 text-[11px] text-slate-500">Obs: {cierreHoy.observaciones}</div>}
-                    {cierreHoy.cerrado_por_nombre && <div className="mt-1 text-[10px] text-slate-400">Por: {cierreHoy.cerrado_por_nombre}</div>}
-                  </div>
-                </div>
-              ) : (
-                /* ── Formulario de cierre ── */
-                <div className="max-w-[640px]">
-                  <div className="text-[17px] font-semibold text-slate-800 mb-1">Cierre de caja — {resolveToday()}</div>
-                  <div className="text-[13px] text-slate-400 mb-5">{sedes.find((s) => s.sede_id === sedeId)?.nombre || "Sede"} · Cuenta lo que hay físicamente en el cajón y compáralo con lo que el sistema espera.</div>
-
-                  {cierreError && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-700">{cierreError}</div>}
-                  {cierreSuccess && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg text-[11px] text-green-700">{cierreSuccess}</div>}
-
-                  <div className="grid grid-cols-2 gap-3 mb-5">
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mb-1">El sistema esperaba</div>
-                      <div className="text-[18px] font-bold text-slate-800">{formatCurrency(metricas.metodos_pago?.efectivo ?? 0)}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">Cobros efectivo - gastos - traslados</div>
-                    </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.5px] text-slate-400 mb-1">Desglose del sistema</div>
-                      <div className="text-[12px] text-slate-500 mt-1 leading-[1.8]">
-                        Cobros efectivo: <span className="font-semibold text-slate-800">{formatCurrency(metricas.metodos_pago?.efectivo ?? 0)}</span><br />
-                        Gastos operativos: <span className="font-semibold text-slate-800">-{formatCurrency(0)}</span><br />
-                        Traslados a Mayor: <span className="font-semibold text-slate-800">-{loadingResumen ? "…" : resumenFinanciero ? formatCurrency(resumenFinanciero.traslados.menor_a_mayor) : "–"}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2.5 mb-5">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">¿Cuánto contaste físicamente?</label>
-                      <input
-                        value={cierreContado}
-                        onChange={(e) => setCierreContado(e.target.value)}
-                        className="px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:border-slate-800"
-                        placeholder="$ 0"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Diferencia</label>
-                      {(() => {
-                        const contadoNum = parseFloat(cierreContado.replace(/[^0-9.-]/g, ""));
-                        const esperado = metricas.metodos_pago?.efectivo ?? 0;
-                        if (isNaN(contadoNum) || !cierreContado.trim()) {
-                          return <div className="px-3 py-2 border border-slate-200 rounded-md text-[15px] font-bold text-slate-400 bg-slate-50">—</div>;
-                        }
-                        const diff = contadoNum - esperado;
-                        const color = diff === 0 ? "text-slate-400" : diff > 0 ? "text-green-600" : "text-red-600";
-                        return <div className={`px-3 py-2 border border-slate-200 rounded-md text-[15px] font-bold bg-slate-50 ${color}`}>{diff > 0 ? "+" : ""}{formatCurrency(diff)}</div>;
-                      })()}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1 mb-5">
-                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.4px]">Observaciones generales (opcional)</label>
-                    <textarea
-                      value={cierreObservaciones}
-                      onChange={(e) => setCierreObservaciones(e.target.value)}
-                      className="px-3 py-2 border border-slate-200 rounded-md text-[12px] resize-y min-h-[56px] leading-relaxed focus:outline-none focus:border-slate-800"
-                      placeholder="Novedades del día, situaciones especiales..."
-                    />
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { setCierreContado(""); setCierreObservaciones(""); setCierreError(null); }}
-                      className="px-4 py-2 border border-slate-200 rounded-md text-[12px] font-semibold text-slate-500 hover:bg-slate-50"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={handleGuardarCierre}
-                      disabled={cierreLoading}
-                      className="px-4 py-2 bg-slate-800 text-white rounded-md text-[12px] font-semibold hover:bg-slate-700 disabled:opacity-60"
-                    >
-                      {cierreLoading ? "Guardando…" : "Guardar cierre"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Historial de cierres ── */}
-              {cierresHistorial.length > 0 && (
-                <div className="mt-6">
-                  <Card title="Historial de cierres recientes" titleSub={`${cierresHistorial.length} registros`}>
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr>
-                          {["Fecha", "Esperado", "Contado", "Diferencia", "Estado", "Observaciones"].map((h, i) => (
-                            <th key={i} className="text-left text-[9px] font-bold uppercase tracking-[0.5px] text-slate-400 pb-2 border-b border-slate-200">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cierresHistorial.slice(0, 10).map((c: any, idx: number) => {
-                          const diff = c.diferencia ?? ((c.efectivo_contado ?? 0) - (c.efectivo_esperado ?? 0));
-                          return (
-                            <tr key={c.cierre_id || idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                              <td className="py-2.5 text-[12px] text-slate-600">{c.fecha}</td>
-                              <td className="py-2.5 text-[12px] text-slate-800 tabular-nums">{formatCurrency(c.efectivo_esperado ?? 0)}</td>
-                              <td className="py-2.5 text-[12px] text-slate-800 tabular-nums">{formatCurrency(c.efectivo_contado ?? 0)}</td>
-                              <td className={`py-2.5 text-[12px] font-semibold tabular-nums ${diff === 0 ? "text-slate-400" : diff > 0 ? "text-green-600" : "text-red-600"}`}>
-                                {diff === 0 ? "$0" : `${diff > 0 ? "+" : ""}${formatCurrency(diff)}`}
-                              </td>
-                              <td className="py-2.5">
-                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                  diff === 0 ? "bg-green-50 text-green-600 border border-green-200" :
-                                  "bg-amber-50 text-amber-600 border border-amber-200"
-                                }`}>
-                                  {diff === 0 ? "Cuadrado" : "Con diferencia"}
-                                </span>
-                              </td>
-                              <td className="py-2.5 text-[11px] text-slate-500 max-w-[160px] truncate">{c.observaciones || "—"}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </Card>
-                </div>
-              )}
-            </>
-          )}
+        </>
+      )}
 
       {/* ══ MÉTRICAS DE CLIENTES ════════════════════════════ */}
       <SectionTitle>Métricas de clientes</SectionTitle>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-3.5">
-        <ClientMetric label="Clientes atendidos" value={String(clientesUnicos || metricas.cantidad_ventas || 0)} sub="este período" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+        <ClientMetric label="Atendidos" value={String(clientesUnicos || metricas.cantidad_ventas || 0)} sub="este período" />
         <ClientMetric label="Nuevos" value={String(nuevosClientes)} sub={clientesUnicos > 0 ? `${Math.round((nuevosClientes / clientesUnicos) * 100)}% del total` : "este período"} />
         <ClientMetric label="Recurrentes" value={String(recurrentes)} sub={clientesUnicos > 0 ? `${pctRecurrentes}% del total` : "este período"} />
-        <ClientMetric label="Recurrencia prom." value={clientAnalytics?.recurrencia?.texto ?? "–"} sub={clientAnalytics?.recurrencia ? `${clientAnalytics.recurrencia.clientes_recurrentes} clientes` : "datos no disponibles"} />
+        <ClientMetric label="Recurrencia prom." value={clientAnalytics?.recurrencia?.texto ?? "–"} sub={clientAnalytics?.recurrencia ? `${clientAnalytics.recurrencia.clientes_recurrentes} clientes` : "datos no disponibles"} smallValue />
         <ClientMetric label="Ticket promedio" value={formatCurrency(metricas.ticket_promedio)} sub="por visita" />
-        <ClientMetric label="LTV promedio" value={clientAnalytics?.ltv ? formatCurrency(clientAnalytics.ltv.ltv_promedio) : "–"} sub={clientAnalytics?.ltv ? `ticket prom: ${formatCurrency(clientAnalytics.ltv.ticket_promedio)}` : "datos no disponibles"} />
+        <ClientMetric label="LTV promedio" value={clientAnalytics?.ltv ? formatCurrency(clientAnalytics.ltv.ltv_promedio) : "–"} sub={clientAnalytics?.ltv ? `ticket prom: ${formatCurrency(clientAnalytics.ltv.ticket_promedio)}` : "datos no disponibles"} smallValue />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 mb-3.5">
-        <Card title="Composición de clientes">
-          <div className="flex items-center gap-5">
-            <div className="w-[90px] h-[90px] rounded-full relative flex-shrink-0" style={{ background: `conic-gradient(#1E293B 0% ${pctRecurrentes}%, #E2E8F0 ${pctRecurrentes}% 100%)` }}>
-              <div className="absolute inset-[18px] rounded-full bg-white flex items-center justify-center flex-col">
-                <span className="text-base font-bold text-slate-800">{pctRecurrentes}%</span>
-                <span className="text-[8px] text-slate-400">recurrentes</span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {/* Composición de clientes – SVG donut */}
+        <Card title="Composición de clientes" titleSub="Meta retención: 85%">
+          <div className="flex items-center gap-6 py-1">
+            <svg className="flex-shrink-0" width="80" height="80" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r={donutRadius} fill="none" stroke="#f3f4f6" strokeWidth="12" />
+              <circle
+                cx="40" cy="40" r={donutRadius} fill="none" stroke="#0a0a0a" strokeWidth="12"
+                strokeDasharray={`${donutStroke(pctRecurrentes)} ${donutCircumference - donutStroke(pctRecurrentes)}`}
+                strokeDashoffset={donutCircumference * 0.25}
+                transform="rotate(-90 40 40)"
+              />
+              <text x="40" y="44" textAnchor="middle" fontSize="11" fontWeight="600" fill="#0a0a0a">{pctRecurrentes}%</text>
+            </svg>
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-center gap-2 text-[12.5px]">
+                <div className="w-2 h-2 rounded-full bg-[#0a0a0a] flex-shrink-0" />
+                <span className="text-[#6b6b68]">Recurrentes</span>
+                <span className="font-semibold font-sans ml-auto pl-3">{recurrentes}<span className="text-[11px] text-[#9b9b97] ml-1">· {pctRecurrentes}%</span></span>
               </div>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5 text-[11px] mb-1.5"><div className="w-2 h-2 rounded-sm bg-slate-800" /><span>Recurrentes: {recurrentes}</span></div>
-              <div className="flex items-center gap-1.5 text-[11px] mb-1.5"><div className="w-2 h-2 rounded-sm bg-slate-200" /><span>Nuevos: {nuevosClientes}</span></div>
-              <div className="mt-2.5 text-[10px] text-slate-400">Meta retención: 85%</div>
+              <div className="flex items-center gap-2 text-[12.5px]">
+                <div className="w-2 h-2 rounded-full bg-[#e8e8e6] flex-shrink-0" />
+                <span className="text-[#6b6b68]">Nuevos</span>
+                <span className="font-semibold font-sans ml-auto pl-3">{nuevosClientes}<span className="text-[11px] text-[#9b9b97] ml-1">· {clientesUnicos > 0 ? Math.round((nuevosClientes / clientesUnicos) * 100) : 0}%</span></span>
+              </div>
             </div>
           </div>
         </Card>
 
-        <Card title="Estado de la base">
+        {/* Estado de la base – table with status dots */}
+        <Card title="Estado de la base" titleSub={estadoBase ? `Total: ${estadoBase.total} clientes` : undefined}>
           {estadoBase ? (
             <>
-              <RowItem name="Activos" value={String(estadoBase.activos)} sub={estadoBase.total > 0 ? `${Math.round((estadoBase.activos / estadoBase.total) * 100)}% del total` : undefined} />
-              <RowItem name="En riesgo" value={String(estadoBase.en_riesgo)} sub={estadoBase.total > 0 ? `${Math.round((estadoBase.en_riesgo / estadoBase.total) * 100)}% del total` : undefined} />
-              <RowItem name="Perdidos" value={String(estadoBase.perdidos)} sub={estadoBase.total > 0 ? `${Math.round((estadoBase.perdidos / estadoBase.total) * 100)}% del total` : undefined} />
-              {estadoBase.sin_visita > 0 && (<RowItem name="Sin visita registrada" value={String(estadoBase.sin_visita)} />)}
-              <div className="mt-1.5 text-[10px] text-slate-400">Total base: {estadoBase.total} clientes</div>
+              <table className="w-full border-collapse">
+                <tbody>
+                  <tr className="border-b border-[#e8e8e6]">
+                    <td className="py-3 text-[13px] align-middle"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#16a34a] mr-1.5 align-middle" />Activos</td>
+                    <td className="py-3 text-right align-middle"><span className="font-semibold font-sans text-[15px]">{estadoBase.activos}</span> <span className="text-[11px] text-[#9b9b97]">{estadoBase.total > 0 ? `${Math.round((estadoBase.activos / estadoBase.total) * 100)}%` : ""}</span></td>
+                  </tr>
+                  <tr className="border-b border-[#e8e8e6]">
+                    <td className="py-3 text-[13px] align-middle"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#ea580c] mr-1.5 align-middle" />En riesgo</td>
+                    <td className="py-3 text-right align-middle"><span className="font-semibold font-sans text-[15px]">{estadoBase.en_riesgo}</span> <span className="text-[11px] text-[#9b9b97]">{estadoBase.total > 0 ? `${Math.round((estadoBase.en_riesgo / estadoBase.total) * 100)}%` : ""}</span></td>
+                  </tr>
+                  <tr className="border-b border-[#e8e8e6]">
+                    <td className="py-3 text-[13px] align-middle"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#6b7280] mr-1.5 align-middle" />Perdidos</td>
+                    <td className="py-3 text-right align-middle"><span className="font-semibold font-sans text-[15px]">{estadoBase.perdidos}</span> <span className="text-[11px] text-[#9b9b97]">{estadoBase.total > 0 ? `${Math.round((estadoBase.perdidos / estadoBase.total) * 100)}%` : ""}</span></td>
+                  </tr>
+                  {estadoBase.sin_visita > 0 && (
+                    <tr>
+                      <td className="py-3 text-[13px] align-middle"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#d1d1cf] mr-1.5 align-middle" />Sin visita registrada</td>
+                      <td className="py-3 text-right align-middle"><span className="font-semibold font-sans text-[15px]">{estadoBase.sin_visita}</span> <span className="text-[11px] text-[#9b9b97]">{estadoBase.total > 0 ? `${Math.round((estadoBase.sin_visita / estadoBase.total) * 100)}%` : ""}</span></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              <div className="mt-2 text-[11.5px] text-[#9b9b97]">Total base · {estadoBase.total} clientes</div>
             </>
           ) : churnData.length > 0 ? (
-            <>
-              <RowItem name="Activos (0–120 días)" value={String(churnActivos)} sub="detectados" />
-              <RowItem name="En riesgo (121–180 días)" value={String(churnEnRiesgo)} sub="detectados" />
-              <RowItem name="Perdidos (181+ días)" value={String(churnPerdidos)} sub="detectados" />
-            </>
+            <table className="w-full border-collapse">
+              <tbody>
+                <tr className="border-b border-[#e8e8e6]">
+                  <td className="py-3 text-[13px]"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#16a34a] mr-1.5 align-middle" />Activos (0–120 días)</td>
+                  <td className="py-3 text-right"><span className="font-semibold font-sans text-[15px]">{churnActivos}</span></td>
+                </tr>
+                <tr className="border-b border-[#e8e8e6]">
+                  <td className="py-3 text-[13px]"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#ea580c] mr-1.5 align-middle" />En riesgo (121–180 días)</td>
+                  <td className="py-3 text-right"><span className="font-semibold font-sans text-[15px]">{churnEnRiesgo}</span></td>
+                </tr>
+                <tr>
+                  <td className="py-3 text-[13px]"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#6b7280] mr-1.5 align-middle" />Perdidos (181+ días)</td>
+                  <td className="py-3 text-right"><span className="font-semibold font-sans text-[15px]">{churnPerdidos}</span></td>
+                </tr>
+              </tbody>
+            </table>
           ) : (
-            <>
-              <RowItem name="Activos" value="–" />
-              <RowItem name="En riesgo" value="–" />
-              <RowItem name="Perdidos" value="–" />
-            </>
+            <table className="w-full border-collapse">
+              <tbody>
+                <tr className="border-b border-[#e8e8e6]"><td className="py-3 text-[13px]"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#16a34a] mr-1.5 align-middle" />Activos</td><td className="py-3 text-right font-semibold font-sans text-[15px]">–</td></tr>
+                <tr className="border-b border-[#e8e8e6]"><td className="py-3 text-[13px]"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#ea580c] mr-1.5 align-middle" />En riesgo</td><td className="py-3 text-right font-semibold font-sans text-[15px]">–</td></tr>
+                <tr><td className="py-3 text-[13px]"><span className="inline-block w-1.5 h-1.5 rounded-full bg-[#6b7280] mr-1.5 align-middle" />Perdidos</td><td className="py-3 text-right font-semibold font-sans text-[15px]">–</td></tr>
+              </tbody>
+            </table>
           )}
-          {!estadoBase && (<div className="mt-1.5 text-[10px] text-slate-400">Segmentación completa requiere módulo de analítica avanzada</div>)}
+          {!estadoBase && (<div className="mt-2 text-[11.5px] text-[#9b9b97]">Segmentación completa requiere módulo de analítica avanzada</div>)}
         </Card>
 
-        <Card title="Nuevos clientes">
+        {/* Nuevos clientes */}
+        <Card title="Nuevos clientes" titleSub={clientesNuevos ? `${clientesNuevos.total} en el período` : undefined}>
           {clientesNuevos && clientesNuevos.clientes.length > 0 ? (
-            <>
-              <div className="text-[10px] text-slate-400 mb-2">{clientesNuevos.total} nuevos en el período</div>
-              <div className="space-y-1">
-                {clientesNuevos.clientes.slice(0, 6).map((c) => (
-                  <div key={c.cliente_id} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-b-0">
-                    <div>
-                      <div className="font-medium text-slate-800">{c.nombre}</div>
-                      <div className="text-[10px] text-slate-400">{c.fecha_creacion?.slice(0, 10)}</div>
-                    </div>
-                    <div className="text-[10px] text-slate-500 text-right">{c.telefono}</div>
+            <div className="flex flex-col">
+              {clientesNuevos.clientes.slice(0, 6).map((c) => (
+                <div key={c.cliente_id} className="flex items-center justify-between gap-3 py-[11px] border-b border-[#e8e8e6] last:border-b-0">
+                  <div>
+                    <div className="text-[13px] font-medium text-[#0a0a0a]">{c.nombre}</div>
+                    <div className="text-[11px] text-[#9b9b97] mt-0.5">{c.fecha_creacion?.slice(0, 10)}</div>
                   </div>
-                ))}
-              </div>
-            </>
+                  <div className="text-[12px] font-sans text-[#6b6b68] whitespace-nowrap">{c.telefono}</div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <p className="text-xs text-slate-400 py-4 text-center">Sin nuevos clientes en este período</p>
+            <p className="text-[12.5px] text-[#9b9b97] py-8 text-center">Sin nuevos clientes en este período</p>
           )}
         </Card>
       </div>
@@ -1819,43 +936,245 @@ export function DashboardSedeView({
       {/* ══ RENDIMIENTO POR ESTILISTA ════════════════════════ */}
       <SectionTitle>Rendimiento por estilista</SectionTitle>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-3.5">
-        <Card title="Ranking por ingreso generado" titleSub="servicios + productos" scrollable action={<button onClick={() => navigate(stylistsPath)} className="text-[11px] text-slate-500 hover:text-slate-800 font-medium transition-colors">Ver todos →</button>}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <Card title="Ranking por ingreso generado" action={stylistsPath ? <button onClick={() => navigate(stylistsPath)} className="text-[11.5px] text-[#9b9b97] hover:text-[#0a0a0a] cursor-pointer transition-colors">Ver todos →</button> : undefined}>
           {extendedMetrics && extendedMetrics.topEstilistas.length > 0 ? (
-            extendedMetrics.topEstilistas.map((est, idx) => (
-              <div key={est.nombre} className="flex items-center gap-2.5 py-2 border-b border-slate-100 last:border-b-0">
-                <span className="text-[11px] font-bold text-slate-400 w-4">{idx + 1}</span>
-                <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{est.initials}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-slate-800 truncate">{est.nombre}</div>
-                  <div className="text-[10px] text-slate-500">{est.citas} citas · Ticket prom: {formatCurrency(est.ticketPromedio)}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[13px] font-bold text-slate-800">{formatCurrency(est.total)}</div>
-                  <div className="text-[9px] text-slate-400">{metricas.ventas_totales > 0 ? `${Math.round((est.total / metricas.ventas_totales) * 100)}%` : "–"}</div>
-                </div>
-              </div>
-            ))
+            <div className="flex flex-col">
+              {extendedMetrics.topEstilistas.map((est, idx) => {
+                const maxTotal = extendedMetrics.topEstilistas[0]?.total || 1;
+                return (
+                  <div key={est.nombre} className="flex items-center gap-3 py-[11px] border-b border-[#e8e8e6] last:border-b-0">
+                    <span className="w-5 text-[12px] text-[#9b9b97] font-sans flex-shrink-0">{idx + 1}</span>
+                    <div className="w-7 h-7 rounded-full bg-[#f7f7f6] border border-[#e8e8e6] flex items-center justify-center text-[11px] font-semibold text-[#6b6b68] flex-shrink-0">{est.initials}</div>
+                    <span className="flex-1 text-[13px] font-medium text-[#0a0a0a] truncate">{est.nombre}</span>
+                    <span className="text-[11.5px] text-[#9b9b97] flex-shrink-0">{est.citas} citas</span>
+                    <div className="w-20 h-1 bg-[#f7f7f6] rounded-sm overflow-hidden flex-shrink-0">
+                      <div className="h-full bg-[#0a0a0a] rounded-sm" style={{ width: `${Math.max(2, (est.total / maxTotal) * 100)}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
-            <p className="text-xs text-slate-400 py-4 text-center">Sin datos de estilistas para este período</p>
+            <p className="text-[12.5px] text-[#9b9b97] py-8 text-center">Sin datos de estilistas para este período</p>
           )}
         </Card>
 
-        <Card title="Productos más vendidos" action={<button onClick={() => navigate(productsPath)} className="text-[11px] text-slate-500 hover:text-slate-800 font-medium transition-colors">Ver todos →</button>}>
+        <Card title="Productos más vendidos" action={productsPath ? <button onClick={() => navigate(productsPath)} className="text-[11.5px] text-[#9b9b97] hover:text-[#0a0a0a] cursor-pointer transition-colors">Ver todos →</button> : undefined}>
           {extendedMetrics && extendedMetrics.topProductos.length > 0 ? (
             <>
               {extendedMetrics.topProductos.map((p) => (
                 <RowItem key={p.nombre} name={p.nombre} value={formatCurrency(p.total)} sub={`${p.cantidad} uds`} />
               ))}
-              <div className="mt-2 text-[10px] text-slate-400">
+              <div className="mt-3 text-[11.5px] text-[#9b9b97]">
                 Venta prom. de producto por cita: {metricas.cantidad_ventas > 0 ? formatCurrency(metricas.ventas_productos / metricas.cantidad_ventas) : "–"}
               </div>
             </>
           ) : (
-            <p className="text-xs text-slate-400 py-4 text-center">Sin datos de productos para este período</p>
+            <p className="text-[12.5px] text-[#9b9b97] py-8 text-center">Sin datos de productos para este período</p>
           )}
         </Card>
       </div>
+
+      {/* ══ INFORME DETALLADO DE CITAS ═══════════════════════ */}
+      {(() => {
+        const STATUS_PILL: Record<string, { label: string; pillCls: string; dotCls: string }> = {
+          asistida:   { label: "Asistida",   pillCls: "bg-[#f0fdf4] text-[#16a34a]", dotCls: "bg-[#16a34a]" },
+          cancelada:  { label: "Cancelada",  pillCls: "bg-[#fff7ed] text-[#ea580c]", dotCls: "bg-[#ea580c]" },
+          precita:    { label: "Precita",    pillCls: "bg-[#f3f4f6] text-[#6b7280]", dotCls: "bg-[#6b7280]" },
+          confirmada: { label: "Confirmada", pillCls: "bg-[#eff6ff] text-[#2563eb]", dotCls: "bg-[#2563eb]" },
+        };
+
+        const q = citasSearch.toLowerCase();
+        const filtered = citasDetalle.filter((c: any) => {
+          const est = resolveEstado(c.estado || "");
+          const matchQ = !q ||
+            (c.cliente_nombre || c.nombre_cliente || "").toLowerCase().includes(q) ||
+            (c.correo || c.cliente_correo || "").toLowerCase().includes(q) ||
+            (c.estilista_nombre || c.profesional_nombre || "").toLowerCase().includes(q) ||
+            (c.servicio_nombre || "").toLowerCase().includes(q);
+          const matchEstado = !citasFilterEstado || est === citasFilterEstado;
+          const matchEstilista = !citasFilterEstilista ||
+            (c.estilista_nombre || c.profesional_nombre || "") === citasFilterEstilista;
+          return matchQ && matchEstado && matchEstilista;
+        });
+
+        const totalPages = Math.max(1, Math.ceil(filtered.length / CITAS_PER_PAGE));
+        const safePage = Math.min(citasPage, totalPages);
+        const pageRows = filtered.slice((safePage - 1) * CITAS_PER_PAGE, safePage * CITAS_PER_PAGE);
+
+        const estilistas = Array.from(new Set(
+          citasDetalle.map((c: any) => c.estilista_nombre || c.profesional_nombre || "").filter(Boolean)
+        )).sort();
+
+        const exportCSV = () => {
+          if (filtered.length === 0) return;
+          const headers = ["Fecha", "Hora", "Cliente", "Correo", "Teléfono", "Estilista", "Servicio", "Estado"];
+          const rows = filtered.map((c: any) => [
+            c.fecha || "",
+            c.hora || c.hora_inicio || "",
+            c.cliente_nombre || c.nombre_cliente || "",
+            c.correo || c.cliente_correo || "",
+            c.telefono || c.cliente_telefono || "",
+            c.estilista_nombre || c.profesional_nombre || "",
+            c.servicio_nombre || (c.servicios_resumen || ""),
+            c.estado || "",
+          ].map((v: string) => `"${v.replace(/"/g, '""')}"`).join(","));
+          const csv = [headers.join(","), ...rows].join("\n");
+          const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `citas-${new Date().toISOString().slice(0, 10)}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        return (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3.5">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-[#9b9b97] mb-1">Informe detallado de citas</div>
+                <div className="text-[12px] text-[#9b9b97]">Actualizado según el período seleccionado</div>
+              </div>
+              <button
+                onClick={exportCSV}
+                className="inline-flex items-center gap-1.5 px-3 py-[5px] border border-[#e8e8e6] rounded-[5px] text-[12px] font-medium text-[#6b6b68] bg-white hover:bg-[#f7f7f6] hover:text-[#0a0a0a] transition-all"
+              >
+                <Download className="w-3 h-3" />
+                Exportar CSV
+              </button>
+            </div>
+
+            <div className="bg-white border border-[#e8e8e6] rounded-lg overflow-hidden">
+              {/* Toolbar */}
+              <div className="flex items-center gap-2.5 px-4 py-3 border-b border-[#e8e8e6]">
+                <div className="relative flex-1 max-w-[280px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-[13px] h-[13px] opacity-35 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por cliente, correo o estilista…"
+                    value={citasSearch}
+                    onChange={(e) => { setCitasSearch(e.target.value); setCitasPage(1); }}
+                    className="w-full pl-[30px] pr-2.5 py-1.5 border border-[#e8e8e6] rounded-[5px] text-[12.5px] bg-[#f7f7f6] text-[#0a0a0a] outline-none focus:border-[#d1d1cf] focus:bg-white transition-colors"
+                  />
+                </div>
+                <select
+                  value={citasFilterEstado}
+                  onChange={(e) => { setCitasFilterEstado(e.target.value); setCitasPage(1); }}
+                  className="px-2.5 py-1.5 border border-[#e8e8e6] rounded-[5px] text-[12.5px] bg-[#f7f7f6] text-[#6b6b68] outline-none cursor-pointer"
+                >
+                  <option value="">Todos los estados</option>
+                  <option value="asistida">Asistida</option>
+                  <option value="cancelada">Cancelada</option>
+                  <option value="precita">Precita</option>
+                  <option value="confirmada">Confirmada</option>
+                </select>
+                <select
+                  value={citasFilterEstilista}
+                  onChange={(e) => { setCitasFilterEstilista(e.target.value); setCitasPage(1); }}
+                  className="px-2.5 py-1.5 border border-[#e8e8e6] rounded-[5px] text-[12.5px] bg-[#f7f7f6] text-[#6b6b68] outline-none cursor-pointer"
+                >
+                  <option value="">Todas las estilistas</option>
+                  {estilistas.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <span className="text-[12px] text-[#9b9b97] ml-auto whitespace-nowrap">
+                  Mostrando {Math.min(filtered.length, safePage * CITAS_PER_PAGE)} de {filtered.length} citas
+                </span>
+              </div>
+
+              {/* Table */}
+              <table className="w-full border-collapse">
+                <thead className="bg-[#f7f7f6]">
+                  <tr>
+                    {["Fecha", "Hora", "Cliente", "Correo electrónico", "Teléfono", "Estilista", "Servicio", "Estado"].map((h) => (
+                      <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-[#9b9b97] whitespace-nowrap border-b border-[#e8e8e6] first:pl-5 last:pr-5">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.length > 0 ? (
+                    pageRows.map((c: any, i: number) => {
+                      const est = resolveEstado(c.estado || "");
+                      const pill = STATUS_PILL[est] || STATUS_PILL.precita;
+                      return (
+                        <tr key={i} className="hover:bg-[#f7f7f6] transition-colors">
+                          <td className="px-4 py-[11px] text-[13px] border-b border-[#e8e8e6] first:pl-5 font-sans text-[12px] text-[#6b6b68]">{c.fecha || ""}</td>
+                          <td className="px-4 py-[11px] text-[13px] border-b border-[#e8e8e6] font-sans text-[12px] text-[#6b6b68]">{c.hora || c.hora_inicio || ""}</td>
+                          <td className="px-4 py-[11px] text-[13px] border-b border-[#e8e8e6] font-medium">{c.cliente_nombre || c.nombre_cliente || ""}</td>
+                          <td className="px-4 py-[11px] text-[13px] border-b border-[#e8e8e6] text-[#6b6b68]">{c.correo || c.cliente_correo || ""}</td>
+                          <td className="px-4 py-[11px] text-[13px] border-b border-[#e8e8e6] font-sans text-[12px] text-[#6b6b68]">{c.telefono || c.cliente_telefono || ""}</td>
+                          <td className="px-4 py-[11px] text-[13px] border-b border-[#e8e8e6] text-[#6b6b68]">{c.estilista_nombre || c.profesional_nombre || ""}</td>
+                          <td className="px-4 py-[11px] text-[13px] border-b border-[#e8e8e6] text-[#6b6b68]">{c.servicio_nombre || c.servicios_resumen || ""}</td>
+                          <td className="px-4 py-[11px] text-[13px] border-b border-[#e8e8e6] last:pr-5">
+                            <span className={`inline-flex items-center gap-[5px] px-2.5 py-[3px] rounded-full text-[11.5px] font-medium whitespace-nowrap ${pill.pillCls}`}>
+                              <span className={`w-[5px] h-[5px] rounded-full ${pill.dotCls}`} />
+                              {pill.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="px-5 py-10 text-center text-[13px] text-[#9b9b97]">
+                        Sin datos de citas para este período
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-5 py-3 border-t border-[#e8e8e6] text-[12px] text-[#9b9b97]">
+                  <span>Página {safePage} de {totalPages}</span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setCitasPage((p) => Math.max(1, p - 1))}
+                      disabled={safePage <= 1}
+                      className="w-7 h-7 rounded-[5px] border border-[#e8e8e6] flex items-center justify-center text-[12px] text-[#6b6b68] bg-white hover:bg-[#f7f7f6] transition-all disabled:opacity-40"
+                    >
+                      ‹
+                    </button>
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let page: number;
+                      if (totalPages <= 5) page = i + 1;
+                      else if (safePage <= 3) page = i + 1;
+                      else if (safePage >= totalPages - 2) page = totalPages - 4 + i;
+                      else page = safePage - 2 + i;
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCitasPage(page)}
+                          className={`w-7 h-7 rounded-[5px] border flex items-center justify-center text-[12px] transition-all ${
+                            page === safePage
+                              ? "bg-[#0a0a0a] text-white border-[#0a0a0a]"
+                              : "border-[#e8e8e6] text-[#6b6b68] bg-white hover:bg-[#f7f7f6]"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setCitasPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={safePage >= totalPages}
+                      className="w-7 h-7 rounded-[5px] border border-[#e8e8e6] flex items-center justify-center text-[12px] text-[#6b6b68] bg-white hover:bg-[#f7f7f6] transition-all disabled:opacity-40"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }

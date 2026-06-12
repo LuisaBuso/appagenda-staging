@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, LogOut, Mail, MapPin, Phone, Building2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../components/Auth/AuthContext";
+import { getSedes, type Sede } from "../../../components/Branch/sedesApi";
+import { formatSedeNombre } from "../../../lib/sede";
 import StylistBottomNav from "../../../components/Layout/StylistBottomNav";
 
 export default function StylistProfilePage() {
@@ -26,6 +28,45 @@ export default function StylistProfilePage() {
     return [];
   }, [user?.sedes_permitidas]);
 
+  // Resolve sede names from IDs
+  const [sedeNamesMap, setSedeNamesMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (sedesPermitidas.length < 2 || !user?.access_token) return;
+
+    let cancelled = false;
+
+    const loadNames = async () => {
+      try {
+        const allSedes = await getSedes(user.access_token);
+        if (cancelled) return;
+
+        const map: Record<string, string> = {};
+        for (const sede of allSedes) {
+          const id = sede.sede_id ?? sede.unique_id ?? sede._id;
+          if (id) {
+            map[id] = formatSedeNombre(sede.nombre, id);
+          }
+        }
+        setSedeNamesMap(map);
+      } catch {
+        // silent — fallback to nombre_local or raw id
+      }
+    };
+
+    void loadNames();
+    return () => { cancelled = true; };
+  }, [sedesPermitidas.length, user?.access_token]);
+
+  const getSedeLabel = (sedeId: string): string => {
+    // 1. Check fetched names map
+    if (sedeNamesMap[sedeId]) return sedeNamesMap[sedeId];
+    // 2. If it's the user's primary sede, use nombre_local
+    if (sedeId === user?.sede_id && user?.nombre_local) return user.nombre_local;
+    // 3. Fallback to raw ID
+    return sedeId;
+  };
+
   const currentSedeId = activeSedeId ?? user?.sede_id ?? "";
 
   const initials = useMemo(() => {
@@ -37,7 +78,7 @@ export default function StylistProfilePage() {
   }, [user?.name]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       <div className="mx-auto w-full max-w-[480px] pb-28">
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
           <button
@@ -107,9 +148,7 @@ export default function StylistProfilePage() {
               >
                 {sedesPermitidas.map((sedeId) => (
                   <option key={sedeId} value={sedeId}>
-                    {sedeId === user?.sede_id && user?.nombre_local
-                      ? user.nombre_local
-                      : sedeId}
+                    {getSedeLabel(sedeId)}
                   </option>
                 ))}
               </select>

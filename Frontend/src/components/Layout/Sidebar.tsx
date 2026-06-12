@@ -18,6 +18,7 @@ import { useAuth } from "../Auth/AuthContext";
 import { APP_MODULES, AGENDA_PATHS, canAccess, type AppModule } from "../../lib/access-control";
 import { formatSedeNombre } from "../../lib/sede";
 import { getSedeById, getSedes, type Sede as BranchSede } from "../Branch/sedesApi";
+import { SedeDropdown } from "../ui/SedeDropdown";
 
 interface NavItem {
   title: string;
@@ -73,8 +74,8 @@ const navItems: NavItem[] = [
   { title: "Facturación", href: "/superadmin/billing", icon: CreditCard, module: APP_MODULES.SUPER_BILLING },
   { title: "Facturación", href: "/sede/billing", icon: CreditCard, module: APP_MODULES.SEDE_BILLING },
 
-  // { title: "Cierre de Caja", href: "/superadmin/cierre-caja", icon: Wallet, module: APP_MODULES.SUPER_CIERRE_CAJA },
-  // { title: "Cierre de Caja", href: "/sede/cierre-caja", icon: Wallet, module: APP_MODULES.SEDE_CIERRE_CAJA },
+  { title: "Finanzas", href: "/superadmin/finanzas", icon: Wallet, module: APP_MODULES.SUPER_FINANZAS },
+  { title: "Finanzas", href: "/sede/finanzas", icon: Wallet, module: APP_MODULES.SEDE_FINANZAS },
 
   { title: "Gift Cards", href: "/superadmin/gift-cards", icon: Gift, module: APP_MODULES.SUPER_GIFT_CARDS },
   { title: "Gift Cards", href: "/sede/gift-cards", icon: Gift, module: APP_MODULES.SEDE_GIFT_CARDS },
@@ -292,7 +293,7 @@ export function Sidebar() {
         <div className="h-5 w-px bg-gray-200 shrink-0 hidden md:block" />
 
         {/* Nav items — horizontal, scrollable */}
-        <nav className="hidden md:flex items-center gap-0.5 flex-1 overflow-x-auto">
+        <nav className="hidden md:flex items-center gap-0.5 flex-1 overflow-x-auto scrollbar-hide">
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -303,6 +304,51 @@ export function Sidebar() {
             const isProductsItem =
               item.module === APP_MODULES.SUPER_PRODUCTS ||
               item.module === APP_MODULES.SEDE_PRODUCTS;
+
+            const isFinanzasItem =
+              item.module === APP_MODULES.SUPER_FINANZAS ||
+              item.module === APP_MODULES.SEDE_FINANZAS;
+
+            if (isFinanzasItem) {
+              const FINANZAS_SUBITEMS = [
+                { label: "Estado Financiero", tab: "estado-financiero" },
+                { label: "Cierre de Caja", tab: "cierre-caja" },
+              ];
+              return (
+                <div key={item.href} className="relative shrink-0 group">
+                  <button
+                    onClick={() => navigate(`${item.href}?tab=estado-financiero`)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors",
+                      isActive
+                        ? "bg-gray-900 text-white"
+                        : "text-gray-700 hover:bg-gray-100"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {item.title}
+                    <ChevronDown className="h-3 w-3 opacity-50" />
+                  </button>
+
+                  <div className="absolute left-0 top-full z-50 hidden group-hover:block pt-1">
+                    <div className="w-52 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                      {FINANZAS_SUBITEMS.map((sub) => (
+                        <button
+                          key={sub.tab}
+                          onClick={() => {
+                            navigate(`${item.href}?tab=${sub.tab}`);
+                            setIsMobileOpen(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
 
             if (isProductsItem) {
               const PRODUCTOS_SUBITEMS = [
@@ -372,18 +418,14 @@ export function Sidebar() {
         {/* Sede selector */}
         {shouldShowSedeSelector && (
           <div className="hidden md:flex items-center shrink-0">
-            <select
+            <SedeDropdown
               value={selectedSedeId}
-              onChange={(e) => handleSedeChange(e.target.value)}
-              className="h-8 rounded-md border border-gray-300 bg-white px-2 text-xs text-gray-900 focus:border-gray-900 focus:outline-none"
+              onChange={handleSedeChange}
+              options={sedeOptions}
               disabled={loadingSedeOptions}
-            >
-              {sedeOptions.map((sede) => (
-                <option key={sede.sede_id} value={sede.sede_id}>
-                  {sede.nombre}
-                </option>
-              ))}
-            </select>
+              size="sm"
+              align="right"
+            />
           </div>
         )}
 
@@ -439,18 +481,15 @@ export function Sidebar() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mt-3 mb-2">
                 Sede activa
               </p>
-              <select
+              <SedeDropdown
                 value={selectedSedeId}
-                onChange={(e) => handleSedeChange(e.target.value)}
-                className="h-9 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-gray-900 focus:outline-none"
+                onChange={handleSedeChange}
+                options={sedeOptions}
                 disabled={loadingSedeOptions}
-              >
-                {sedeOptions.map((sede) => (
-                  <option key={sede.sede_id} value={sede.sede_id}>
-                    {sede.nombre}
-                  </option>
-                ))}
-              </select>
+                size="md"
+                align="left"
+                className="w-full [&>button]:w-full [&>button]:justify-between"
+              />
             </div>
           )}
 

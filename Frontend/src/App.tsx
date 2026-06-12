@@ -41,6 +41,7 @@ import SedeStylists from './pages/PageSede/Styslit/Sytlist';
 import SedeCommissions from './pages/PageSede/Comisiones/Comisiones'; // Módulo de comisiones para admin_sede
 import SedeInvoices from "./pages/PageSede/Sales-invoiced/Sales-invoiced"
 // import CierreCajaPage from "./pages/PageSede/CierreCaja/CierreCaja"
+import FinanzasPage from "./pages/PageSede/Finanzas/Finanzas";
 
 /* --- Stylist Pages --- */
 import StylistAppointment from "./pages/PageStylist/Appoinment/Appointment";
@@ -248,7 +249,14 @@ function App() {
                 </PrivateRoute>
               }
             />
-
+            <Route
+              path="/superadmin/finanzas"
+              element={
+                <PrivateRoute requiredAccess={APP_MODULES.SUPER_FINANZAS}>
+                  <FinanzasPage />
+                </PrivateRoute>
+              }
+            />
 
             {/* --- ADMIN SEDE --- */}
             <Route
@@ -289,6 +297,14 @@ function App() {
               element={
                 <PrivateRoute requiredAccess={APP_MODULES.SEDE_BILLING}>
                   <SedeBilling />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/sede/finanzas"
+              element={
+                <PrivateRoute requiredAccess={APP_MODULES.SEDE_FINANZAS}>
+                  <FinanzasPage />
                 </PrivateRoute>
               }
             />

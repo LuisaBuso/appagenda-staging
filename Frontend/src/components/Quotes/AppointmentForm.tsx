@@ -455,6 +455,16 @@ const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
     return last?.servicio || last?.servicio_nombre || last?.servicios?.[0]?.nombre || null;
   }, [clientHistorial]);
 
+  const lastThreeServices = useMemo(() => {
+    if (!clientHistorial.length) return [];
+    return clientHistorial.slice(0, 3).map((h: any) => {
+      const name = h?.servicio || h?.servicio_nombre || h?.servicios?.[0]?.nombre || '—';
+      const date = h?.fecha || h?.appointment_date || h?.date || '';
+      const short = date ? new Date(date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) : '';
+      return { name, date: short };
+    });
+  }, [clientHistorial]);
+
   // Service handlers
   const addService = useCallback((s: Servicio) => {
     const id = s.servicio_id || s._id;
@@ -571,28 +581,32 @@ const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
           />
 
           {selectedClient && (
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-1">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
               <div className="text-sm font-semibold text-gray-900">{selectedClient.nombre}</div>
               {selectedClient.telefono && (
                 <div className="text-xs text-gray-500">{selectedClient.telefono}</div>
               )}
-              <div className="flex items-center gap-3 pt-1">
-                {loadingHistorial ? (
-                  <span className="text-xs text-gray-400">Cargando historial…</span>
-                ) : (
-                  <>
-                    <span className="text-xs text-gray-600">
-                      <span className="font-semibold text-gray-900">{clientHistorial.length}</span>{' '}
-                      visita{clientHistorial.length !== 1 ? 's' : ''}
-                    </span>
-                    {lastServiceName && (
-                      <span className="text-xs text-gray-500">
-                        Último: <span className="font-medium text-gray-700">{lastServiceName}</span>
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
+              {loadingHistorial ? (
+                <span className="text-xs text-gray-400">Cargando historial…</span>
+              ) : (
+                <>
+                  <div className="text-xs text-gray-600">
+                    <span className="font-semibold text-gray-900">{clientHistorial.length}</span>{' '}
+                    visita{clientHistorial.length !== 1 ? 's' : ''}
+                  </div>
+                  {lastThreeServices.length > 0 && (
+                    <div className="border-t border-gray-200 pt-2 space-y-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Últimas visitas</div>
+                      {lastThreeServices.map((s: { name: string; date: string }, i: number) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-gray-700 font-medium truncate mr-2">{s.name}</span>
+                          {s.date && <span className="text-gray-400 text-[11px] flex-shrink-0">{s.date}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -771,7 +785,7 @@ const AppointmentScheduler: React.FC<AppointmentSchedulerProps> = ({
               <div className="text-sm font-bold text-gray-900">{selectedClient.nombre}</div>
               <div className="text-xs text-gray-500 mt-0.5">
                 {clientHistorial.length} visita{clientHistorial.length !== 1 ? 's' : ''}
-                {lastServiceName && <> · Último: {lastServiceName}</>}
+                {lastThreeServices.length > 0 && <> · Últimos: {lastThreeServices.map((s: { name: string }) => s.name).join(', ')}</>}
               </div>
             </div>
 

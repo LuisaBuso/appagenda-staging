@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sidebar } from "../../../components/Layout/Sidebar";
 import { PageHeader } from "../../../components/Layout/PageHeader";
 import { Button } from "../../../components/ui/button";
@@ -9,6 +9,7 @@ import { PeriodoSelector, type PeriodoId } from "../../../components/ui/PeriodoS
 import { DatePicker } from "../../../components/ui/DatePicker";
 // import { Textarea } from "../../../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
+import { SedeDropdown } from "../../../components/ui/SedeDropdown";
 import { Loader2 } from "lucide-react"; //Wallet +
 import { cashService, getEfectivoDia } from "./api/cashService";
 import type { CashCierre, CashEgreso, CashIngreso, CashResumen, CashReporteRaw } from "./types";
@@ -698,11 +699,11 @@ export default function CierreCajaPage() {
     };
   }, [isSuperAdmin, user?.access_token, applySedeSelection, sedeId, sedeNombre]);
 
-  const handleSedeChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const value = String(event.target.value || "").trim();
-    if (!value) return;
-    const option = sedesOptions.find((item) => item.id === value);
-    applySedeSelection(value, option?.nombre || value);
+  const handleSedeChange = (value: string) => {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return;
+    const option = sedesOptions.find((item) => item.id === trimmed);
+    applySedeSelection(trimmed, option?.nombre || trimmed);
   };
 
   const handlePeriodChange = (newPeriod: HeaderPeriod) => {
@@ -1929,7 +1930,7 @@ export default function CierreCajaPage() {
 
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-white">
       <Sidebar />
       <main className="flex-1 overflow-auto">
         <div className="p-4 md:p-8">
@@ -1952,14 +1953,15 @@ export default function CierreCajaPage() {
                   <div>
                     <label className={FIELD_LABEL_CLASS}>Sede</label>
                     {isSuperAdmin ? (
-                      <select className={SELECT_CLASS} value={sedeId ?? ""} onChange={handleSedeChange}>
-                        <option value="">{loadingSedes ? "Cargando sedes..." : "Selecciona sede"}</option>
-                        {sedesOptions.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.nombre}
-                          </option>
-                        ))}
-                      </select>
+                      <SedeDropdown
+                        value={sedeId ?? ""}
+                        onChange={handleSedeChange}
+                        options={sedesOptions.map((o) => ({ sede_id: o.id, nombre: o.nombre }))}
+                        disabled={loadingSedes}
+                        size="md"
+                        align="left"
+                        className="w-full [&>button]:w-full [&>button]:h-10 [&>button]:justify-between"
+                      />
                     ) : (
                       <div className="flex h-10 items-center rounded-md border border-gray-300 bg-gray-50 px-3 text-sm text-gray-900 shadow-sm">
                         {sedeNombre ? `Caja Sede ${sedeNombre}` : "Caja de la sede"}

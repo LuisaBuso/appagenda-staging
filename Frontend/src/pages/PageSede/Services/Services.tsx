@@ -186,7 +186,7 @@ export default function ServicesPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+    <div className="flex flex-col h-screen overflow-hidden bg-white">
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto">

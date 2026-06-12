@@ -617,11 +617,11 @@ export function ProductsList() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-white">
       <Sidebar />
       <main className="flex-1 overflow-auto">
         {/* Products sub-navigation */}
-        <div className="border-b border-gray-200 bg-white px-4 md:px-8 pt-1 overflow-x-auto">
+        <div className="border-b border-gray-200 bg-white px-4 md:px-8 pt-1 overflow-x-auto scrollbar-hide">
           <nav className="flex gap-0">
             {(
               [

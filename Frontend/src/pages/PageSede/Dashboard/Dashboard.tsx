@@ -8,6 +8,7 @@ import { formatDateDMY, toLocalYMD, formatLocalDate } from "../../../lib/dateFor
 import { getSedes, getVentasAvailablePeriods, type Sede } from "./analyticsApi";
 import { normalizeCurrencyCode, getStoredCurrency } from "../../../lib/currency";
 import { RefreshCw, AlertCircle } from "lucide-react";
+import { SedeDropdown } from "../../../components/ui/SedeDropdown";
 import { Alert, AlertTitle, AlertDescription } from "../../../components/ui/alert";
 
 import { DashboardSedeView } from "./DashboardSedeView";
@@ -211,67 +212,62 @@ export default function DashboardPage() {
     );
   }
 
-  if (loadingSedes) {
-    return (
-      <div className="flex flex-col h-screen items-center justify-center">
-        <div className="w-12 h-12 border-4 border-gray-200 border-t-gray-800 rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-gray-600">Cargando información de la sede...</p>
-      </div>
-    );
-  }
-
-  if (!selectedSede) {
-    return (
-      <div className="flex flex-col h-screen items-center justify-center text-center">
-        <h2 className="text-2xl font-bold">Sede no disponible</h2>
-        <p className="mt-2 text-gray-600">No se pudo determinar tu sede asignada.</p>
-        <button
-          onClick={() => loadSedes()}
-          className="mt-4 flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
-        >
-          <RefreshCw className="w-4 h-4" /> Reintentar
-        </button>
-      </div>
-    );
-  }
-
   // ── Main Render ──────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-screen bg-white">
       <Sidebar />
 
-      <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-        <div className="max-w-[1300px] mx-auto px-7 py-5 pb-10">
+      <main className="flex-1 overflow-y-auto bg-white">
+        <div className="w-full px-4 md:px-8 py-6 pb-16">
 
-          {/* Header */}
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-800">Dashboard</h1>
-              <div className="text-xs text-slate-500 mt-0.5">
-                Inteligencia de negocio · {user?.pais || "Colombia"} · {monedaUsuario}
+          {loadingSedes ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <div className="w-10 h-10 border-4 border-gray-200 border-t-gray-800 rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-gray-500 text-sm">Cargando datos…</p>
               </div>
             </div>
-            <div className="flex gap-1.5 items-center">
+          ) : !selectedSede ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <h2 className="text-2xl font-bold">Sede no disponible</h2>
+              <p className="mt-2 text-gray-600">No se pudo determinar tu sede asignada.</p>
+              <button
+                onClick={() => loadSedes()}
+                className="mt-4 flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+              >
+                <RefreshCw className="w-4 h-4" /> Reintentar
+              </button>
+            </div>
+          ) : (
+          <>
+
+          {/* Header */}
+          <div className="flex justify-between items-end mb-7">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+              <div className="text-sm text-gray-500 mt-0.5">
+                Inteligencia operativa · {user?.pais || "Colombia"} · {monedaUsuario}
+              </div>
+            </div>
+            <div className="flex gap-2 items-center">
               {sedes.length > 1 && (
-                <select
+                <SedeDropdown
                   value={selectedSede}
-                  onChange={(e) => handleSedeChange(e.target.value)}
-                  className="px-3 py-[7px] border border-slate-200 rounded-lg text-xs bg-white font-semibold text-slate-700 focus:outline-none"
-                >
-                  <option value="global">Todas las sedes</option>
-                  {sedes.map((sede) => (
-                    <option key={sede.sede_id} value={sede.sede_id}>
-                      {formatSedeNombre(sede.nombre, sede.sede_id)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={handleSedeChange}
+                  options={sedes.map((s) => ({ value: s.sede_id, label: formatSedeNombre(s.nombre, s.sede_id) }))}
+                  showAll
+                  allValue="global"
+                  allLabel="Todas las sedes"
+                  size="sm"
+                  align="right"
+                />
               )}
               <button
                 onClick={() => setReloadNonce((n) => n + 1)}
-                className="px-3.5 py-[7px] bg-white border border-slate-200 rounded-lg text-[11px] text-slate-500 font-medium flex items-center gap-1 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-[7px] border border-[#e8e8e6] rounded-[5px] text-[12.5px] font-medium text-[#6b6b68] bg-white hover:bg-[#f7f7f6] hover:text-[#0a0a0a] transition-all"
               >
-                <RefreshCw className="w-3 h-3" /> Actualizar
+                <RefreshCw className="w-[13px] h-[13px]" /> Actualizar
               </button>
             </div>
           </div>
@@ -292,7 +288,7 @@ export default function DashboardPage() {
             periodoActivo={periodoActivo}
             onPeriodoChange={handlePeriodoChange}
             rangoAplicado={rangoAplicado}
-            className="mb-[18px]"
+            className="mb-8"
           />
 
           {/* Content */}
@@ -307,6 +303,8 @@ export default function DashboardPage() {
             getPeriodDisplay={getPeriodDisplay}
             userPais={user?.pais}
           />
+          </>
+          )}
         </div>
       </main>
     </div>

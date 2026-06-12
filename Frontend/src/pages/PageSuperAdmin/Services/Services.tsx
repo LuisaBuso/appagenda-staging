@@ -170,7 +170,7 @@ export default function ServicesPage() {
       <Sidebar />
 
       <main className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="w-full px-4 md:px-8 py-6">
           {/* Header */}
           <PageHeader
             title="Servicios"

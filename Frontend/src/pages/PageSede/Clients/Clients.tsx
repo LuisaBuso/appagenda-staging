@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Sidebar } from "../../../components/Layout/Sidebar"
-import { ClientsList } from "./clients-list"
+import { ClientsList, type FilterType } from "./clients-list"
 import { ClientDetail } from "./client-detail"
 import { ClientFormModal } from "./ClientFormModal"
 import type { Cliente } from "../../../types/cliente"
@@ -72,11 +72,13 @@ export default function ClientsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [activeFilter, setActiveFilter] = useState<FilterType>('Todos')
   const [itemsPorPagina] = useState(10)
   const hasLoadedInitialRef = useRef(false)
   const latestRequestIdRef = useRef(0)
   const latestCedulaHydrationRef = useRef(0)
   const cedulaCacheRef = useRef<Map<string, string | null>>(new Map())
+  const hydratedIdsRef = useRef<Set<string>>(new Set())
 
   const { user, isLoading: authLoading, activeSedeId } = useAuth()
   const getAccessToken = useCallback((): string => {
@@ -108,13 +110,27 @@ export default function ClientsPage() {
       return
     }
 
+    const extraParams: { segmento?: string; sede_interacciones?: string } = {}
+    if (currentSedeId && activeFilter !== 'Todos') {
+      extraParams.sede_interacciones = currentSedeId
+    }
+    const SEGMENTO_MAP: Partial<Record<FilterType, string>> = {
+      Nuevos: 'nuevos',
+      Activos: 'activos',
+      'En riesgo': 'en_riesgo',
+      Perdidos: 'perdidos',
+    }
+    if (SEGMENTO_MAP[activeFilter]) {
+      extraParams.segmento = SEGMENTO_MAP[activeFilter]
+    }
+
     const requestId = ++latestRequestIdRef.current
     try {
       if (isInitialRequest) setIsInitialLoading(true)
       else setIsFetching(true)
       setError(null)
 
-      const result = await clientesService.getClientesPaginados(token, { pagina, limite: itemsPorPagina, filtro })
+      const result = await clientesService.getClientesPaginados(token, { pagina, limite: itemsPorPagina, filtro, ...extraParams })
       if (requestId !== latestRequestIdRef.current) return
 
       const clientesNormalizados = result.clientes.map(asegurarClienteCompleto)
@@ -131,7 +147,7 @@ export default function ClientsPage() {
       if (requestId !== latestRequestIdRef.current) return
       setIsFetching(false)
     }
-  }, [getAccessToken, itemsPorPagina, applyCedulaCache])
+  }, [getAccessToken, itemsPorPagina, applyCedulaCache, activeFilter, currentSedeId])
 
   useEffect(() => {
     const token = getAccessToken()
@@ -159,6 +175,7 @@ export default function ClientsPage() {
 
     const idsParaEnriquecer = clientes
       .filter((cliente) => {
+        if (hydratedIdsRef.current.has(cliente.id)) return false
         const sinUltimaVisita = !(cliente as any).ultima_visita
         const sinCedula = !cliente.cedula?.trim() && !cedulaCacheRef.current.has(cliente.id)
         return sinUltimaVisita || sinCedula
@@ -184,6 +201,7 @@ export default function ClientsPage() {
         cedulaCacheRef.current.set(clienteId, cedula || null)
         updates.set(clienteId, { cedula, ltv, diasSinVenir, ultima_visita })
       }
+      for (const id of idsParaEnriquecer) hydratedIdsRef.current.add(id)
       if (updates.size === 0) return
       setClientes((prev) =>
         prev.map((cliente) => {
@@ -208,6 +226,10 @@ export default function ClientsPage() {
   }, [loadClientes])
 
   const handleSearch = useCallback((value: string) => { setSearchTerm(value) }, [])
+
+  const handleFilterChange = useCallback((f: FilterType) => {
+    setActiveFilter(f)
+  }, [])
 
   const handleSelectClient = useCallback(async (client: Cliente) => {
     const token = getAccessToken()
@@ -301,6 +323,9 @@ export default function ClientsPage() {
         onSearch={handleSearch}
         searchValue={searchTerm}
         sedeName={user?.nombre_local}
+        activeFilter={activeFilter}
+        onFilterChange={handleFilterChange}
+
       />
 
       {selectedClient && (
